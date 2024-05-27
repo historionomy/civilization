@@ -106,6 +106,21 @@ parameters = {}
 with open(parameter_file, "r") as file:
     parameters = yaml.load(file, Loader=yaml.FullLoader)
 
+default_grid_size = 10
+default_counter = -4000
+
+def reset_simulation():
+    if st.session_state.reset_simulation_request == True:
+        st.session_state.counter = default_counter
+        # Create table of Cells with random initialization
+        h, w, _ = st.session_state.map_img.shape
+        num_rows = h // st.session_state.grid_size
+        num_cols = w // st.session_state.grid_size
+        st.session_state.cells_table = [[Cells(np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand()) for _ in range(num_cols)] for _ in range(num_rows)]
+
+        st.session_state.reset_simulation_request = False
+
+
 # Main function
 def main():
 
@@ -113,23 +128,25 @@ def main():
 
     # Initialize session state variables
     if 'counter' not in st.session_state:
-        st.session_state.counter = -4000
+        st.session_state.counter = default_counter
     if 'running' not in st.session_state:
         st.session_state.running = False
     if 'selected_cell' not in st.session_state:
         st.session_state.selected_cell = (0, 0)
+    if 'reset_simulation_request' not in st.session_state:
+        st.session_state.reset_simulation_request = True        
+    if 'grid_size' not in st.session_state:
+        st.session_state.grid_size = default_grid_size
+    if 'map_img' not in st.session_state:
+        st.session_state.map_img = load_map()
 
-    grid_size = st.sidebar.slider("Grid size", 5, 50, 10)
-    map_img = load_map()
+    grid_size = st.sidebar.slider("Grid size", 5, 50, default_grid_size)
+    if st.session_state.grid_size != grid_size:
+        st.session_state.grid_size = grid_size
+        st.session_state.reset_simulation_request = True
 
-    # Create table of Cells with random initialization
-    h, w, _ = map_img.shape
-    num_rows = h // grid_size
-    num_cols = w // grid_size
-    if 'cells_table' not in st.session_state:
-        st.session_state.cells_table = [[Cells(np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand()) for _ in range(num_cols)] for _ in range(num_rows)]
-
-    grid_img = add_grid(map_img, grid_size, st.session_state.cells_table)
+    reset_simulation()
+    grid_img = add_grid(st.session_state.map_img, st.session_state.grid_size, st.session_state.cells_table)
 
     # Create two columns with custom widths
     col1, col2 = st.columns([4, 1])  # 4:1 ratio for the column widths
@@ -145,7 +162,7 @@ def main():
     with col2:
         if coords:
             x, y = coords['x'], coords['y']
-            cell_x, cell_y = x // grid_size, y // grid_size
+            cell_x, cell_y = x // st.session_state.grid_size, y //st.session_state. grid_size
             st.session_state.selected_cell = (cell_x, cell_y)
 
         cell_x, cell_y = st.session_state.selected_cell
@@ -188,8 +205,8 @@ def main():
     if col2.button("Pause"):
         st.session_state.running = False
     if col3.button("Reset"):
-        st.session_state.counter = -4000
         st.session_state.running = False
+        st.session_state.reset_simulation_request = True
 
     st.write(f"Counter value: {st.session_state.counter}")
 
