@@ -1,0 +1,13 @@
+streamlit
+snowflake-connector-python
+supabase
+bcrypt
+pandas
+geopandas
+plotly
+pillow
+pyjwt
+pyyaml
+opencv-python
+streamlit-image-coordinates
+time

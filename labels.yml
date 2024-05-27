@@ -1,0 +1,27 @@
+labels:
+  EN:
+    main_title: Simulation of civilization progress
+    main_description: This application allows to run simulation of demographical, technological and political evolution of Europe and Middle-East over the span of the last 10000 years
+    map_title: Map
+    parameters_title: Parameters
+
+    parameters:
+      demographics:
+        name: "Demographics"
+        natural_growth: "Yearly natural growth rate per 1000 people"
+      geographics:
+        name: "Geographics"
+        sea_blue_cutoff: "Proportion of blue in RGB format for sea characterization"
+        fertility_per_technology_level:
+          name: "Max. population density per sq km"
+          forest_fertility: "Brown Forest soils"
+          mediterranean_fertility: "Mediterranean climate soils"
+          default: "default"
+          paleolithic: "Paleolithic"
+          neolithic: "Neolithic"
+          copper_age: "Copper Age"
+          bronze_age: "Bronze Age"
+          iron_age_1: "Iron Age I"
+          iron_age_2: "Iron Age II"
+          pre_industrial: "Pre industrial"
+          
