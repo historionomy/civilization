@@ -34,7 +34,7 @@ class Cells:
 
 # Load the map of Europe
 def load_map():
-    map_path = "europe_middle_east.jpg"  # Path to your map image
+    map_path = "europe.png"  # Path to your map image
     map_img = cv2.imread(map_path)
     map_img = cv2.cvtColor(map_img, cv2.COLOR_BGR2RGB)  # Convert from BGR to RGB
     return map_img
