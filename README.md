@@ -13,7 +13,6 @@ Ere industrielle : 2 hab max par ha
 
 | Thème   |  Description  | Paramètres | Equation | Constantes
 | -------- | ------- | -------| ---- |---- |
-
 | Géographie  | La carte contient différents sous-espaces géographiques : plaines, montagnes, thalassographie. La carte est discrétisée sous forme de cases.   | | | $f :$ ``` fertility_per_technology_level ``` <br> $\kappa :$ ``` population_diffusivity ```
 | Démographie  | Chaque case a une capacité démographique maximale, qui dépend du niveau technologique.     | $P :$ ``` population ```  <br> $T :$``` technological_level ```| $${dP \over dt} = r P(1-{P \over P_{max}}) -\textrm{div} (\kappa\nabla{P})$$ <br> $$P_{max} = f(T)$$ | $r :$ ``` natural_growth ```  |
 | Culture    | Chaque unité de population a une “culture” qui évolue dans un espace multidimensionnel. Cette culture accompagne les migrants vers les cases voisines. La diffusion culturelle est influencée par le “prestige culturel”, qui dépend du niveau technologique et de l’avancement politique.  | $C:$ ``` total_culture ```  <br> $c :$  ``` culture_vector ```  <br> $S:$  ``` political_stage ``` <br> $n :$  ``` number_of_cultures ``` | $$C = \sum^n c_k  $$ <br> $${dc_k \over dt}=({c_k \over C} \cdot T \cdot S)-{\textrm{div} (\kappa\nabla{(c_kP)})\over P}$$ | ``` cultural_prestige_tech_coefficient ```  <br>  ``` political_stage_coefficient ```|
@@ -38,4 +37,3 @@ xychart-beta
     y-axis "max_population_per_ha" 0 --> 2
     line [0.001, 0.01, 0.1, 0.2, 0.3, 0.5, 1,2]
 ```
-
