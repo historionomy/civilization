@@ -10,23 +10,17 @@ Plaine : Surface cultivable par pixel = 950 ha
 Ere industrielle : 2 hab max par ha cultivable
 
 ```mermaid
-graph TB
-a(Sea)
-b(Ice)
-c(Lake)
-d(Plain)
-e(Mountain)
-f(Forest)
-g(Steppe)
-h(Semi-Arid)
-i(Desert)
+graph LR
+a(Sea) ~~~ b(Ice) ~~~ c(Lake)
+d(Plain) ~~~ e(Mountain) ~~~ f(Forest)
+g(Steppe) ~~~ h(Semi-Arid) ~~~ i(Desert)
 
 classDef A fill:#0D2C5B,stroke:#0D2C5B,color:#FFFFFF;
 classDef B fill:#D3E4E3,stroke:#D3E4E3;
 classDef C fill:#3370CC,stroke:#3370CC,color:#FFFFFF;
 classDef D fill:#7EAF46,stroke:#7EAF46;
 classDef E fill:#414545,stroke:#414545,color:#FFFFFF;
-classDef F fill:#5F833C,stroke:#5F833C;
+classDef F fill:#5F833C,stroke:#5F833C,color:#FFFFFF;
 classDef G fill:#C8CD68,stroke:#C8CD68;
 classDef H fill:#E1BA5A,stroke:#E1BA5A;
 classDef I fill:#F7E898,stroke:#F7E898;
