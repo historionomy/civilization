@@ -14,7 +14,8 @@ grid_dimensions:
 
 demographics:
   # yearly natural growth coefficient
-  natural_growth: 0.1
+  natural_growth: 1.001
+  # natural_growth: 0.0001
 
 geographics:
   # threshold of blue level (in RGB format) for sea characterization
@@ -27,12 +28,12 @@ geographics:
   fertility_per_technology_level:
     default:
       # forest fertility coefficient - green level in RGB multiplied by this value to get agricultural output from forest soils
-      forest_fertility: 10
+      forest_fertility: 100
       # mediterranean fertily coefficient - orange level in RGB multiplied by this value to get agricultural output from mediterranean soils
-      mediterranean_fertility: 5
+      mediterranean_fertility: 50
     paleolithic:
-      forest_fertility: 0.1
-      mediterranean_fertility: 0.1
+      forest_fertility: 1
+      mediterranean_fertility: 1
     neolithic:
       forest_fertility: 1
       mediterranean_fertility: 5

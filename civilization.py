@@ -122,6 +122,10 @@ if 'display_filter' not in st.session_state:
 if 'grid_size' not in st.session_state:
     st.session_state['grid_size'] = 1
 
+# Initialize the session state for grid image
+if 'grid_img' not in st.session_state:
+    st.session_state['grid_img'] = []
+
 # Main function
 def main():
 
@@ -158,6 +162,7 @@ def main():
     h, w, _ = map_img.shape
     num_rows = h // st.session_state['grid_size']
     num_cols = w // st.session_state['grid_size']
+
     if 'cells_table' not in st.session_state:
         st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
         # for dim in st.session_state['parameters']['grid_dimensions']:
@@ -170,21 +175,33 @@ def main():
 
         # st.session_state.cells_table = [[Cells(np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand()) for _ in range(num_cols)] for _ in range(num_rows)]
 
-    if st.session_state.cells_table.current_grid_size != st.session_state['grid_size']:
-        st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
+    # print(st.session_state['cells_table'])
 
-    if st.session_state['display_filter'] == "population":
-        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.population)
-    if st.session_state['display_filter'] == "max_population":
-        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.max_population)
-    if st.session_state['display_filter'] == "culture":
-        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.culture)
-    if st.session_state['display_filter'] == "soil":
-        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.soil_color)
-    if st.session_state['display_filter'] == "technology":
-        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.technology)
-    if st.session_state['display_filter'] == "politics":
-        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.politics)
+    # print(st.session_state.cells_table.current_grid_size)
+        
+    print(st.session_state['cells_table'] is None)
+
+    if st.session_state['cells_table'] is not None:
+
+        if st.session_state['cells_table'].current_grid_size != st.session_state['grid_size']:
+            st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
+
+        if st.session_state['display_filter'] == "population":
+            print("display population")
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.population)
+        if st.session_state['display_filter'] == "max_population":
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.max_population)
+        if st.session_state['display_filter'] == "culture":
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.culture)
+        if st.session_state['display_filter'] == "soil":
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.soil_color)
+        if st.session_state['display_filter'] == "technology":
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.technology)
+        if st.session_state['display_filter'] == "politics":
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.politics)
+
+        if 'grid_img' in st.session_state:
+            st.session_state['grid_img'] = grid_img
 
     map_tab, parameters_tab = st.tabs([
         language_content["map_tab"],
@@ -194,16 +211,50 @@ def main():
     # Map tab
     with map_tab:
 
+        # Counter section
+        st.write("### Counter")
+
+        counter_val = st.text_input("Counter", value=st.session_state.counter)
+        try:
+            counter_val = int(counter_val)
+            counter_val = max(-5000, min(counter_val, 2100))
+        except ValueError:
+            counter_val = -4000
+        st.session_state.counter = counter_val
+
+        time_step = st.slider("Time step", min_value=10, max_value=100, value=10)
+
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+        if col1.button("Play"):
+            st.session_state.running = True
+        if col2.button("Pause"):
+            st.session_state.running = False
+        if col3.button("Reset"):
+            st.session_state.counter = -4000
+            st.session_state.running = False
+
+        st.write(f"Counter value: {st.session_state.counter}")
+
+        
+
         # Create two columns with custom widths
         col1, col2 = st.columns([4, 1])  # 4:1 ratio for the column widths
 
         with col1:
             # Use streamlit_image_coordinates to display the image and capture click coordinates
             coords = streamlit_image_coordinates(
-                grid_img, 
+                st.session_state['grid_img'], 
                 width=1000, 
                 key="image_coords"
             )
+            # print(st.session_state['cells_table'].display)
+            # if st.session_state['cells_table'].display is True:
+            #     coords = streamlit_image_coordinates(
+            #         st.session_state['grid_img'], 
+            #         width=1000, 
+            #         key="image_coords"
+            #     )
+            #     st.session_state['cells_table'].display = False
 
         with col2:
             if coords:
@@ -237,36 +288,24 @@ def main():
                     except ValueError:
                         pass  # Ignore invalid input
 
-        # Counter section
-        st.write("### Counter")
-
-        counter_val = st.text_input("Counter", value=st.session_state.counter)
-        try:
-            counter_val = int(counter_val)
-            counter_val = max(-5000, min(counter_val, 2100))
-        except ValueError:
-            counter_val = -4000
-        st.session_state.counter = counter_val
-
-        time_step = st.slider("Time step", min_value=10, max_value=100, value=10)
-
-        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-        if col1.button("Play"):
-            st.session_state.running = True
-        if col2.button("Pause"):
-            st.session_state.running = False
-        if col3.button("Reset"):
-            st.session_state.counter = -4000
-            st.session_state.running = False
-
-        st.write(f"Counter value: {st.session_state.counter}")
-
-        if st.session_state.running:
-            time.sleep(1)
-            st.session_state.counter += time_step
-            # st.session_state.cells_table = update_cells(st.session_state.cells_table, st.session_state['parameters'])
-            st.session_state.cells_table = st.session_state.cells_table.timestep(st.session_state['parameters'])
-            st.rerun()
+    if st.session_state.running:
+        # while st.session_state.counter < 2100:
+        time.sleep(1)
+        st.session_state.counter += time_step
+        # print(st.session_state['grid_size'])
+        if 'cells_table' in st.session_state:
+            # print(st.session_state.keys())
+            # print(st.session_state.cells_table.current_grid_size)
+            # print(type(st.session_state.cells_table) is Grid)
+            temp_grid = st.session_state.cells_table
+            temp_grid.timestep(st.session_state['parameters'])
+            temp_grid.display = True
+            st.session_state.cells_table = temp_grid
+            # print(st.session_state.cells_table.display)
+            # st.session_state.cells_table = st.session_state.cells_table.timestep(st.session_state['parameters'])
+        # st.session_state.cells_table = update_cells(st.session_state.cells_table, st.session_state['parameters'])
+        # print(st.session_state.cells_table.current_grid_size)
+        st.rerun()
 
     # parameters edition tab
     with parameters_tab:

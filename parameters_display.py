@@ -30,7 +30,7 @@ def create_parameters_tab(language_content, parameters):
                 for tech_stage in temp_parameters["technology"]["technological_stages"]:
                     st.text(language_content["parameters"]["geographics"]["fertility_per_technology_level"][tech_stage])
                     for soil_type in temp_parameters["geographics"]["soil_types"]:
-                        temp_parameters["geographics"]["fertility_per_technology_level"][tech_stage][soil_type + "_fertility"] = st.text_input(language_content["parameters"]["geographics"]["fertility_per_technology_level"][soil_type + "_fertility"], parameters["geographics"]["fertility_per_technology_level"][tech_stage][soil_type + "_fertility"])
+                        temp_parameters["geographics"]["fertility_per_technology_level"][tech_stage][soil_type + "_fertility"] = st.text_input(language_content["parameters"]["geographics"]["fertility_per_technology_level"][soil_type + "_fertility"], parameters["geographics"]["fertility_per_technology_level"][tech_stage][soil_type + "_fertility"], key=language_content["parameters"]["geographics"]["fertility_per_technology_level"][soil_type + "_fertility"] + "_" + tech_stage + "_key")
 
         with col2:
             # culture parameters

@@ -58,6 +58,7 @@ def calculate_greenness(rgb):
 
 class Grid:
     def __init__(self, num_rows, num_cols, map_img, grid_size, parameters):
+        self.display = True
         self.current_grid_size = grid_size
         self.num_rows = num_rows
         self.num_cols = num_cols
@@ -71,7 +72,7 @@ class Grid:
         # print(num_grid_rows, num_grid_cols)
         map_img = map_img[:num_grid_rows, :num_grid_cols, :]
         # self.sea = np.zeros((num_rows, num_cols), dtype=int)
-        self.soil_color = get_array_means(map_img, grid_size, num_cols, num_rows)
+        self.soil_color = get_array_means(map_img, grid_size, num_cols, num_rows) / 255
         self.technology = np.zeros((num_rows, num_cols), dtype=int)
 
         # self.soil = np.zeros((num_rows, num_cols), dtype=int)
@@ -84,20 +85,24 @@ class Grid:
         sea_mask = map_img[:, :, 2] >= parameters['geographics']['sea_blue_cutoff']
         self.sea = sea_mask.astype(int)
 
+        # print(self.soil_color[5,5])
         # compute soil components
         self.soil = {
             "mediterranean" : np.apply_along_axis(calculate_orangeness, 2, self.soil_color),
             "forest" : np.apply_along_axis(calculate_greenness, 2, self.soil_color)
         }
 
+        # print(self.soil)
+
         # print(self.soil['mediterranean'].shape)
 
         # initialize population randomly
-        self.population = np.random.rand(num_rows, num_cols, 1)
+        self.population = np.random.rand(num_rows, num_cols)
 
         # compute population roof at Paleolithic age
         self.max_population = np.zeros((num_rows, num_cols), dtype=float)
         for soil in parameters['geographics']['soil_types']:
+            # print( self.soil[soil][5,5])
             population_per_soil = self.soil[soil] * parameters['geographics']['fertility_per_technology_level']['paleolithic'][soil + "_fertility"]
             # print(self.max_population.shape)
             # print(population_per_soil)
@@ -132,13 +137,19 @@ class Grid:
             for tech_index in range(len(parameters['technology']['technological_stages'])):
                 tech_name = parameters['technology']['technological_stages'][tech_index]
                 tech_mask = self.technology == tech_index
+                # print(tech_mask[5,5])
                 tech_mask = tech_mask.astype(float)
+                # print(tech_mask[5,5])
                 self.max_population += tech_mask * self.soil[soil] * parameters['geographics']['fertility_per_technology_level'][tech_name][soil + "_fertility"]
 
         # population increase
-        self.population = np.exp(parameters['demographics']['natural_growth'])
-
+        # self.population = self.population * np.exp(parameters['demographics']['natural_growth'])
+        print(self.population[5,5])
+        # self.population = self.population * parameters['demographics']['natural_growth']
+        self.population += 0.1
+        print(self.max_population[5,5])
         self.population_excess = np.maximum(self.population - self.max_population, 0)
+        print(self.population_excess[5,5])
 
         # migrations
 
@@ -149,6 +160,7 @@ class Grid:
         
         # distribute excess population to neighbors
         population_migration = convolve(self.population_excess, demo_kernel, mode='constant', cval=0.0)
+        print(population_migration[5,5])
 
         endogenous_demo_ratio = self.population / (self.population + population_migration + 0.0001) # we add an epsilon to the denominator to avoid division by zero
 
@@ -193,7 +205,7 @@ class Grid:
         # add progress where it happened
         self.technology += tech_progress_potential
         # clip maximal progress
-        self.technology = np.min(len(parameters['politics'] - 1, self.technology))
+        self.technology = np.minimum(self.technology, len(parameters['politics']) - 1)
 
         ### political progress
         politics_contagion_kernel = np.array([[0, 1, 0],
@@ -213,7 +225,7 @@ class Grid:
         # add political change where it happened
         self.politics += politics_progress_potential
         # clip maximal progress
-        self.politics = np.min(len(parameters['politics'] - 1, self.politics))
+        self.politics = np.minimum(self.politics, len(parameters['politics']) - 1)
 
 # class Cells:
 #     def __init__(self, population, soil, culture, technology, politics, prestige):
