@@ -1,3 +1,17 @@
+grid_dimensions:
+- name: population
+  type: float
+- name: soil
+  type: int
+- name: culture
+  type: vector
+- name: technology
+  type: int
+- name: politics
+  type: int
+- name: prestige
+  type: float
+
 demographics:
   # yearly natural growth coefficient
   natural_growth: 0.1
@@ -5,6 +19,10 @@ demographics:
 geographics:
   # threshold of blue level (in RGB format) for sea characterization
   sea_blue_cutoff: 100
+  # list of soil types
+  soil_types:
+  - forest
+  - mediterranean
   # soil fertility depending on technology level
   fertility_per_technology_level:
     default:
@@ -58,9 +76,20 @@ technology:
   # - population
   # - political stage
   # - cultural surface beyond a given threshold
+  # - contagion from neighbors
   tech_progress_population_coefficient: 1
   tech_progress_political_coefficient: 1
   tech_progress_cultural_coefficient: 1
+  tech_progress_contagion_coefficient: 1
+
+  # list of technological stages
+  technological_stages:
+  - paleolithic
+  - neolithic
+  - copper_age
+  - iron_age_1
+  - iron_age_2
+  - pre_industrial
 
 politics:
 # list of the political stages
@@ -73,3 +102,23 @@ politics:
   culture_coefficient: 1
   tech_coefficient: 1
   tech_contagion_coefficient: 1
+- name: feodal_1
+  culture_coefficient: 1
+  tech_coefficient: 1
+  tech_contagion_coefficient: 1
+- name: feodal_2
+  culture_coefficient: 1
+  tech_coefficient: 1
+  tech_contagion_coefficient: 1
+- name: feodal_3
+  culture_coefficient: 1
+  tech_coefficient: 1
+  tech_contagion_coefficient: 1
+- name: civil_wars
+  culture_coefficient: 1
+  tech_coefficient: 1
+  tech_contagion_coefficient: 1
+
+politics_progress:
+  politics_progress_population_coefficient: 1
+  politics_progress_contagion_coefficient: 1

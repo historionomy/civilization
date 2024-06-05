@@ -11,6 +11,11 @@ import cv2
 import numpy as np
 from streamlit_image_coordinates import streamlit_image_coordinates
 import time
+import copy
+
+from parameters_display import create_parameters_tab
+from algorithm import Grid
+# from algorithm import update_cells
 
 # MODE = "debug"
 MODE = "run"
@@ -20,18 +25,6 @@ white = (255, 255, 255)
 
 st.set_page_config(layout="wide")
 
-class Cells:
-    def __init__(self, f1, f2, f3, f4, f5):
-        self.f1 = f1
-        self.f2 = f2
-        self.f3 = f3
-        self.f4 = f4
-        self.f5 = f5
-
-    def update_from_neighbors(self, neighbors):
-        mean_value = np.mean([neighbor.f1 for neighbor in neighbors])
-        self.f1 += mean_value
-
 # Load the map of Europe
 def load_map():
     map_path = "europe_middle_east.jpg"  # Path to your map image
@@ -40,76 +33,115 @@ def load_map():
     return map_img
 
 # Function to add grid to the map
-def add_grid(map_img, grid_size, cells_table):
+def add_grid(map_img, grid_size, color_array):
     grid_img = map_img.copy()
     h, w, _ = map_img.shape
     overlay = grid_img.copy()
 
+    print(color_array.shape)
+
     # Draw the color overlay based on cell values
-    for i in range(len(cells_table)):
-        for j in range(len(cells_table[0])):
-            cell = cells_table[i][j]
-            color = (
-                int(np.clip(cell.f1, 0, 1) * 255),
-                int(np.clip(cell.f2, 0, 1) * 255),
-                int(np.clip(cell.f3, 0, 1) * 255),
-                int(np.clip(cell.f4, 0, 1) * 255),
-            )
-            cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
+    map_type = 'scalar'
+    if (len(color_array.shape) > 2):
+        if (color_array.shape[2] == 4):
+            map_type = '3D'
+    if map_type == '3D':
+        for i in range(len(color_array)):
+            for j in range(len(color_array[0])):
+                red, green, blue, alpha = color_array[i][j]
+                color = (
+                    int(np.clip(red, 0, 1) * 255),
+                    int(np.clip(green, 0, 1) * 255),
+                    int(np.clip(blue, 0, 1) * 255),
+                    int(np.clip(alpha, 0, 1) * 255),
+                )
+                # print(color)
+                cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
 
-    for y in range(0, h, grid_size):
-        cv2.line(overlay, (0, y), (w, y), (255, 0, 0), 1)
-    for x in range(0, w, grid_size):
-        cv2.line(overlay, (x, 0), (x, h), (255, 0, 0), 1)
+        for y in range(0, h, grid_size):
+            cv2.line(overlay, (0, y), (w, y), (255, 0, 0), 1)
+        for x in range(0, w, grid_size):
+            cv2.line(overlay, (x, 0), (x, h), (255, 0, 0), 1)
 
-    alpha = 0.3  # Transparency factor
-    grid_img = cv2.addWeighted(overlay, alpha, grid_img, 1 - alpha, 0)
+        alpha = 0.3  # Transparency factor
+        grid_img = cv2.addWeighted(overlay, alpha, grid_img, 1 - alpha, 0)
+
+    else:
+        if (len(color_array.shape) > 2):
+            for i in range(len(color_array)):
+                for j in range(len(color_array[0])):
+                    # print(color_array[i][j][0])
+                    depth = 255 - int(np.clip(color_array[i][j][0], 0, 1) * 255)
+                    color = (depth, 0, 0, depth)
+                    cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
+                    # print(color)
+
+        else:
+            for i in range(len(color_array)):
+                for j in range(len(color_array[0])):
+                    # print(color_array[i][j][0])
+                    depth = 255 - int(np.clip(color_array[i][j], 0, 1) * 255)
+                    color = (depth, 0, 0, depth)
+                    cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
+                    # print(color)
+
+        for y in range(0, h, grid_size):
+            cv2.line(overlay, (0, y), (w, y), (255, 0, 0), 1)
+        for x in range(0, w, grid_size):
+            cv2.line(overlay, (x, 0), (x, h), (255, 0, 0), 1)
+
+        alpha = 0.5  # Transparency factor
+        grid_img = cv2.addWeighted(overlay, alpha, grid_img, 1 - alpha, 0)
 
     return grid_img
-
-# Function to get composite value of a grid cell
-def get_composite_value(map_img, x, y, grid_size):
-    cell = map_img[y:y+grid_size, x:x+grid_size]
-    avg_color_per_row = np.average(cell, axis=0)
-    avg_color = np.average(avg_color_per_row, axis=0)
-    return avg_color
-
-# Function to update cell values based on neighbors
-def update_cells(cells_table):
-    num_rows = len(cells_table)
-    num_cols = len(cells_table[0])
-    new_table = [[Cells(0.0, 0.0, 0.0, 0.0, 0.0) for _ in range(num_cols)] for _ in range(num_rows)]
-
-    for i in range(num_rows):
-        for j in range(num_cols):
-            neighbors = []
-            if i > 0:
-                neighbors.append(cells_table[i-1][j])
-            if i < num_rows - 1:
-                neighbors.append(cells_table[i+1][j])
-            if j > 0:
-                neighbors.append(cells_table[i][j-1])
-            if j < num_cols - 1:
-                neighbors.append(cells_table[i][j+1])
-
-            new_table[i][j].f1 = cells_table[i][j].f1 + np.mean([n.f1 for n in neighbors])
-            new_table[i][j].f2 = cells_table[i][j].f2 + np.mean([n.f2 for n in neighbors])
-            new_table[i][j].f3 = cells_table[i][j].f3 + np.mean([n.f3 for n in neighbors])
-            new_table[i][j].f4 = cells_table[i][j].f4 + np.mean([n.f4 for n in neighbors])
-
-    return new_table
 
 # load parameters
 parameter_file = "parameters.yml"
 
-parameters = {}
+if 'parameters' not in st.session_state:
+    st.session_state['parameters'] = {}
 with open(parameter_file, "r") as file:
-    parameters = yaml.load(file, Loader=yaml.FullLoader)
+    st.session_state['parameters'] = yaml.load(file, Loader=yaml.FullLoader)
+
+# load labels per language
+content_per_language_file = "labels.yml"
+
+content_translations = {}
+with open(content_per_language_file, "r") as file:
+    content_translations = yaml.load(file, Loader=yaml.FullLoader)
+
+# Initialize the session state for selected_language
+if 'selected_language' not in st.session_state:
+    st.session_state['selected_language'] = list(content_translations.keys())[0]
+
+# Initialize the session state for display_filter
+if 'display_filter' not in st.session_state:
+    st.session_state['display_filter'] = []
+
+# Initialize the session state for grid size
+if 'grid_size' not in st.session_state:
+    st.session_state['grid_size'] = 1
 
 # Main function
 def main():
 
-    st.title("Europe Map with Grid")
+    top_menu = st.columns(3)
+    with top_menu[0]:
+        st.session_state['selected_language'] = st.selectbox("Language", options=list(content_translations['labels'].keys()))
+
+    language_content = content_translations['labels'].get(st.session_state['selected_language'], "EN")
+
+    st.title(language_content.get("main_title", "Default Title"))
+
+    st.header(language_content.get("sub_title", "Default Header"))
+
+    display_menu = st.columns(3)
+    label2display = {
+        v: k for k, v in language_content["display"].items()
+    }
+    with display_menu[0]:
+        st.session_state['display_filter'] = st.selectbox(language_content["display_list"] ,options=list(language_content.get("display", {}).values()))
+        st.session_state['display_filter'] = label2display[st.session_state['display_filter']]
 
     # Initialize session state variables
     if 'counter' not in st.session_state:
@@ -119,85 +151,127 @@ def main():
     if 'selected_cell' not in st.session_state:
         st.session_state.selected_cell = (0, 0)
 
-    grid_size = st.sidebar.slider("Grid size", 5, 50, 10)
+    st.session_state['grid_size'] = st.sidebar.slider("Grid size", 5, 50, 20)
     map_img = load_map()
 
     # Create table of Cells with random initialization
     h, w, _ = map_img.shape
-    num_rows = h // grid_size
-    num_cols = w // grid_size
+    num_rows = h // st.session_state['grid_size']
+    num_cols = w // st.session_state['grid_size']
     if 'cells_table' not in st.session_state:
-        st.session_state.cells_table = [[Cells(np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand()) for _ in range(num_cols)] for _ in range(num_rows)]
+        st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
+        # for dim in st.session_state['parameters']['grid_dimensions']:
+        #     if dim['type'] == 'float':
+        #         st.session_state.cells_table[dim] = np.zeros((num_rows, num_cols), dtype=float)
+        #     if dim['type'] == 'int':
+        #         st.session_state.cells_table[dim] = np.zeros((num_rows, num_cols), dtype=int)
+        #     if dim['type'] == 'vector':
+        #         st.session_state.cells_table[dim] = np.random.rand(num_rows, num_cols, 4)
 
-    grid_img = add_grid(map_img, grid_size, st.session_state.cells_table)
+        # st.session_state.cells_table = [[Cells(np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand()) for _ in range(num_cols)] for _ in range(num_rows)]
 
-    # Create two columns with custom widths
-    col1, col2 = st.columns([4, 1])  # 4:1 ratio for the column widths
+    if st.session_state.cells_table.current_grid_size != st.session_state['grid_size']:
+        st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
 
-    with col1:
-        # Use streamlit_image_coordinates to display the image and capture click coordinates
-        coords = streamlit_image_coordinates(
-            grid_img, 
-            width=1000, 
-            key="image_coords"
-        )
+    if st.session_state['display_filter'] == "population":
+        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.population)
+    if st.session_state['display_filter'] == "max_population":
+        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.max_population)
+    if st.session_state['display_filter'] == "culture":
+        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.culture)
+    if st.session_state['display_filter'] == "soil":
+        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.soil_color)
+    if st.session_state['display_filter'] == "technology":
+        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.technology)
+    if st.session_state['display_filter'] == "politics":
+        grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.politics)
 
-    with col2:
-        if coords:
-            x, y = coords['x'], coords['y']
-            cell_x, cell_y = x // grid_size, y // grid_size
-            st.session_state.selected_cell = (cell_x, cell_y)
+    map_tab, parameters_tab = st.tabs([
+        language_content["map_tab"],
+        language_content["parameters_tab"]
+    ])
 
-        cell_x, cell_y = st.session_state.selected_cell
-        st.write(f"Selected Cell: ({cell_x}, {cell_y})")
-        selected_cell = st.session_state.cells_table[cell_x][cell_y]
+    # Map tab
+    with map_tab:
 
-        if not st.session_state.running:
-            f1 = st.text_input("f1", value=selected_cell.f1)
-            f2 = st.text_input("f2", value=selected_cell.f2)
-            f3 = st.text_input("f3", value=selected_cell.f3)
-            f4 = st.text_input("f4", value=selected_cell.f4)
-            f5 = st.text_input("f5", value=selected_cell.f5)
+        # Create two columns with custom widths
+        col1, col2 = st.columns([4, 1])  # 4:1 ratio for the column widths
 
-            if st.button("Save"):
-                try:
-                    selected_cell.f1 = min(1000, max(0, float(f1)))
-                    selected_cell.f2 = min(1000, max(0, float(f2)))
-                    selected_cell.f3 = min(1000, max(0, float(f3)))
-                    selected_cell.f4 = min(1000, max(0, float(f4)))
-                    selected_cell.f5 = min(1000, max(0, float(f5)))
-                except ValueError:
-                    pass  # Ignore invalid input
+        with col1:
+            # Use streamlit_image_coordinates to display the image and capture click coordinates
+            coords = streamlit_image_coordinates(
+                grid_img, 
+                width=1000, 
+                key="image_coords"
+            )
 
-    # Counter section
-    st.write("### Counter")
+        with col2:
+            if coords:
+                x, y = coords['x'], coords['y']
+                cell_x, cell_y = x // st.session_state['grid_size'], y // st.session_state['grid_size']
+                st.session_state.selected_cell = (cell_x, cell_y)
 
-    counter_val = st.text_input("Counter", value=st.session_state.counter)
-    try:
-        counter_val = int(counter_val)
-        counter_val = max(-5000, min(counter_val, 2100))
-    except ValueError:
-        counter_val = -4000
-    st.session_state.counter = counter_val
+            cell_x, cell_y = st.session_state.selected_cell
+            st.write(f"Selected Cell: ({cell_x}, {cell_y})")
+            # selected_cell = st.session_state.cells_table[cell_x][cell_y]
 
-    time_step = st.slider("Time step", min_value=10, max_value=100, value=10)
+            if not st.session_state.running:
+                population = st.text_input(language_content["parameters"]["demographics"]["name"], value=st.session_state.cells_table.population[cell_x, cell_y])
+                # culture = st.text_input(language_content["parameters"]["culture"]["name"], value=st.session_state.cells_table.culture[cell_x, cell_y])
+                politics = st.text_input(language_content["parameters"]["politics"]["name"], value=st.session_state.cells_table.politics[cell_x, cell_y])
+                # soil_color = st.text_input(language_content["parameters"]["geographics"]["soil"], value=st.session_state.cells_table.soil_color[cell_x, cell_y])
+                # technology = st.text_input(language_content["parameters"]["technology"]["name"], value=st.session_state.cells_table.technology[cell_x, cell_y])
+            #     f1 = st.text_input("f1", value=selected_cell.f1)
+            #     f2 = st.text_input("f2", value=selected_cell.f2)
+            #     f3 = st.text_input("f3", value=selected_cell.f3)
+            #     f4 = st.text_input("f4", value=selected_cell.f4)
+            #     f5 = st.text_input("f5", value=selected_cell.f5)
 
-    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-    if col1.button("Play"):
-        st.session_state.running = True
-    if col2.button("Pause"):
-        st.session_state.running = False
-    if col3.button("Reset"):
-        st.session_state.counter = -4000
-        st.session_state.running = False
+                if st.button("Save"):
+                    try:
+                        st.session_state.cells_table.population[cell_x, cell_y] = population
+                        # st.session_state.cells_table.culture[cell_x, cell_y] = culture
+                        st.session_state.cells_table.politics[cell_x, cell_y] = politics
+                        # st.session_state.cells_table.soil_color[cell_x, cell_y] = soil_color
+                        # st.session_state.cells_table.technology[cell_x, cell_y] = technology
+                    except ValueError:
+                        pass  # Ignore invalid input
 
-    st.write(f"Counter value: {st.session_state.counter}")
+        # Counter section
+        st.write("### Counter")
 
-    if st.session_state.running:
-        time.sleep(1)
-        st.session_state.counter += time_step
-        st.session_state.cells_table = update_cells(st.session_state.cells_table)
-        st.rerun()
+        counter_val = st.text_input("Counter", value=st.session_state.counter)
+        try:
+            counter_val = int(counter_val)
+            counter_val = max(-5000, min(counter_val, 2100))
+        except ValueError:
+            counter_val = -4000
+        st.session_state.counter = counter_val
+
+        time_step = st.slider("Time step", min_value=10, max_value=100, value=10)
+
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+        if col1.button("Play"):
+            st.session_state.running = True
+        if col2.button("Pause"):
+            st.session_state.running = False
+        if col3.button("Reset"):
+            st.session_state.counter = -4000
+            st.session_state.running = False
+
+        st.write(f"Counter value: {st.session_state.counter}")
+
+        if st.session_state.running:
+            time.sleep(1)
+            st.session_state.counter += time_step
+            # st.session_state.cells_table = update_cells(st.session_state.cells_table, st.session_state['parameters'])
+            st.session_state.cells_table = st.session_state.cells_table.timestep(st.session_state['parameters'])
+            st.rerun()
+
+    # parameters edition tab
+    with parameters_tab:
+        tab_params = copy.deepcopy(st.session_state['parameters'])
+        create_parameters_tab(language_content, tab_params)
 
 if __name__ == "__main__":
     main()

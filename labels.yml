@@ -1,9 +1,21 @@
 labels:
   EN:
     main_title: Simulation of civilization progress
+    sub_title: Grid of Europe and Middle East
     main_description: This application allows to run simulation of demographical, technological and political evolution of Europe and Middle-East over the span of the last 10000 years
+    map_tab: Map
+    parameters_tab: Parameters
     map_title: Map
     parameters_title: Parameters
+
+    display_list: Displayed data
+    display:
+      population: population
+      max_population: maximum population
+      culture: culture
+      soil: type of soil
+      technology: technological level
+      politics: political stage
 
     parameters:
       demographics:
@@ -11,6 +23,7 @@ labels:
         natural_growth: "Yearly natural growth rate per 1000 people"
       geographics:
         name: "Geographics"
+        soil: "Soil type"
         sea_blue_cutoff: "Proportion of blue in RGB format for sea characterization"
         fertility_per_technology_level:
           name: "Max. population density per sq km"
@@ -24,4 +37,33 @@ labels:
           iron_age_1: "Iron Age I"
           iron_age_2: "Iron Age II"
           pre_industrial: "Pre industrial"
-          
+      scenarios:
+        name: "Scenarios"
+        neolithic:
+          name: "Neolithic"
+          initialization_label: "Initialial population density"
+          forest_population_initialization: "Forest soils"
+          mediterranean_population_initialization: "Mediterranean soils"
+        start_location: "Start of technical progress (coordinates)"
+      culture:
+        name: "Culture"
+        cultural_prestige_tech_coefficient: "Coefficient for Cultural Prestige from population density"
+        political_stage_coefficient: "Coefficient for Cultural Prestige from political stage"
+      technology:
+        name: "Technology"
+        tech_progress_population_coefficient: "Coefficient for Tech Progress from population density"
+        tech_progress_political_coefficient: "Coefficient for Tech Progress from political stage"
+        tech_progress_cultural_coefficient: "Coefficient for Tech Progress from cultural progress"
+        tech_progress_contagion_coefficient: "Coefficient for Tech Progress from technological contagion"
+      politics:
+        name: "Political Stages"
+        culture_coefficient: "Coefficient for Political Progress from cultural status"
+        tech_coefficient: "Coefficient for Political Progress from technological advancement"
+        tech_contagion_coefficient: "Coefficient for Political Progress from "
+        stages:
+          barbarians: "Barbarians"
+          feodal_1: "Feodal 1"
+          feodal_2: "Feodal 2"
+          feodal_3: "Feodal 3"
+          civil_wars: "Civil wars"
+

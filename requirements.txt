@@ -11,3 +11,4 @@ pyyaml
 opencv-python
 streamlit-image-coordinates
 time
+scipy
