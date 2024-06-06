@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 from scipy.ndimage import convolve
 
 MODE = "DEBUG"
@@ -8,15 +9,24 @@ def get_array_means(array, grid_size, num_cols, num_rows):
     # this function get the mean value of the array input in every cell of pixels of dimension 
     # grid_size, and returns the associated array of means
 
-    reshaped_array = array.reshape(-1, grid_size, array.shape[2])
-    means_first_dim_array = reshaped_array.mean(axis=1)
+    n, m, c = array.shape
 
-    reshaped_array_second = means_first_dim_array.reshape(grid_size, -1, array.shape[2])
-    means_second_dim_array = reshaped_array_second.mean(axis=0)
+    # let us remove pixels from borders beyond multiple of grid_size
+    array = array[:(n // grid_size * grid_size), :(m // grid_size * grid_size), :]
 
-    mean_array = means_second_dim_array.reshape(num_rows, num_cols, array.shape[2])
+    # let us compute averages by grid_size blocks
+    reshaped_array = array.reshape(n, m // grid_size, grid_size, c)
+    averaged_array = reshaped_array.mean(axis=2)
+    n, m, c = averaged_array.shape
+    reshaped_array = averaged_array.reshape(n // grid_size, grid_size, m, c)
+    averaged_array = reshaped_array.mean(axis=1)
 
-    return mean_array
+    ### option for simply sampling the array every grid_size
+    # mid_grid_size = grid_size // 2
+    # mean_array = array[mid_grid_size::grid_size, mid_grid_size::grid_size, :]
+    # return mean_array
+
+    return averaged_array
 
 def calculate_orangeness(rgb):
     """Calculate the orangeness of an RGB color."""
@@ -42,6 +52,7 @@ class Grid:
         num_grid_rows = int(num_rows * grid_size)
         num_grid_cols = int(num_cols * grid_size)
         map_img = map_img[:num_grid_rows, :num_grid_cols, :]
+
         self.soil_color = get_array_means(map_img, grid_size, num_cols, num_rows) / 255
 
         # set technological stages at Paleolithic (tech stage zero)
@@ -52,12 +63,11 @@ class Grid:
         self.prestige = np.zeros((num_rows, num_cols), dtype=float)
 
         # extract sea cells
-        sea_mask = self.soil_color[:, :, 2] >= parameters['geographics']['sea_blue_cutoff']
-        self.sea = sea_mask.astype(float)
-
-        if MODE == "DEBUG":
-            print(f'soil color : {self.soil_color[5,5]}')
-            print(f'sea : {self.sea[5, 5]}')
+        sea_blue_mask = self.soil_color[:, :, 2] <= parameters['geographics']['sea_blue_cutoff']
+        sea_green_mask = self.soil_color[:, :, 1] >= parameters['geographics']['sea_green_cutoff']
+        sea_red_mask = self.soil_color[:, :, 0] >= parameters['geographics']['sea_red_cutoff']
+        # self.sea = np.multiply(sea_blue_mask.astype(float), sea_green_mask.astype(float))
+        self.sea = sea_red_mask.astype(float)
 
         # compute soil components
         self.soil = {

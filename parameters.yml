@@ -19,7 +19,9 @@ demographics:
 
 geographics:
   # threshold of blue level (in RGB format) for sea characterization
-  sea_blue_cutoff: 0.4
+  sea_blue_cutoff: 0.3
+  sea_green_cutoff: 0.2
+  sea_red_cutoff: 0.25
   # list of soil types
   soil_types:
   - forest

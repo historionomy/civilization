@@ -17,13 +17,25 @@ from parameters_display import create_parameters_tab
 from algorithm import Grid
 # from algorithm import update_cells
 
-# MODE = "debug"
-MODE = "run"
+MODE = "DEBUG"
+# MODE = "RUN"
 
 black = (0, 0, 0)
 white = (255, 255, 255)
 
 st.set_page_config(layout="wide")
+
+class Cells:
+    def __init__(self, f1, f2, f3, f4, f5):
+        self.f1 = f1
+        self.f2 = f2
+        self.f3 = f3
+        self.f4 = f4
+        self.f5 = f5
+
+    def update_from_neighbors(self, neighbors):
+        mean_value = np.mean([neighbor.f1 for neighbor in neighbors])
+        self.f1 += mean_value
 
 # Load the map of Europe
 def load_map():
@@ -37,6 +49,9 @@ def add_grid(map_img, grid_size, color_array):
     grid_img = map_img.copy()
     h, w, _ = map_img.shape
     overlay = grid_img.copy()
+
+    print(color_array.shape)
+    print(map_img.shape)
 
     # Draw the color overlay based on cell values
     map_type = 'scalar'
@@ -174,10 +189,14 @@ def main():
     if st.session_state.grid_size != grid_size:
         st.session_state.grid_size = grid_size
         st.session_state.reset_simulation_request = True
+
+    # load map
     map_img = load_map()
 
     reset_simulation()
-    grid_img = add_grid(st.session_state.map_img, st.session_state.grid_size, st.session_state.cells_table)
+
+    # CODE AUGUSTIN
+    # grid_img = add_grid(st.session_state.map_img, st.session_state.grid_size, st.session_state.cells_table)
 
     # Create table of Cells with random initialization
     h, w, _ = map_img.shape
@@ -185,29 +204,31 @@ def main():
     num_cols = w // st.session_state['grid_size']
 
     # if grid not instantiated yet, we instantiate it
-    if 'cells_table' not in st.session_state:
-        st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
+    if 'grid' not in st.session_state:
+        st.session_state.grid = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
 
     # if grid is instantiated
-    if st.session_state['cells_table'] is not None:
+    if st.session_state['grid'] is not None:
 
         # necessary to force redraw the map if grid resolution change
-        if st.session_state['cells_table'].current_grid_size != st.session_state['grid_size']:
-            st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
+        if st.session_state['grid'].current_grid_size != st.session_state['grid_size']:
+            st.session_state.grid = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
 
         # this block is for (re)drawing the simulation overlay on the map according to the chosen metric
         if st.session_state['display_filter'] == "population":
-            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.population)
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.grid.population)
+        if st.session_state['display_filter'] == "sea":
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.grid.sea)
         if st.session_state['display_filter'] == "max_population":
-            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.max_population)
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.grid.max_population)
         if st.session_state['display_filter'] == "culture":
-            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.culture)
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.grid.culture)
         if st.session_state['display_filter'] == "soil":
-            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.soil_color)
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.grid.soil_color)
         if st.session_state['display_filter'] == "technology":
-            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.technology)
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.grid.technology)
         if st.session_state['display_filter'] == "politics":
-            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.politics)
+            grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.grid.politics)
 
         if 'grid_img' in st.session_state:
             st.session_state['grid_img'] = grid_img
@@ -252,20 +273,28 @@ def main():
             # Use streamlit_image_coordinates to display the image and capture click coordinates
             coords = streamlit_image_coordinates(
                 st.session_state['grid_img'], 
-                width=1000, 
+                width=st.session_state['grid_img'].shape[1],
                 key="image_coords"
             )
-            # print(st.session_state['cells_table'].display)
-            # if st.session_state['cells_table'].display is True:
+            # CODE AUGUSTIN
+            # coords = streamlit_image_coordinates(
+            #     grid_img, 
+            #     width=1000, 
+            #     key="image_coords"
+            # )
+
+            # print(st.session_state['grid'].display)
+            # if st.session_state['grid'].display is True:
             #     coords = streamlit_image_coordinates(
             #         st.session_state['grid_img'], 
             #         width=1000, 
             #         key="image_coords"
             #     )
-            #     st.session_state['cells_table'].display = False
+            #     st.session_state['grid'].display = False
 
         with col2:
             if coords:
+                
                 x, y = coords['x'], coords['y']
                 cell_x, cell_y = x // st.session_state['grid_size'], y // st.session_state['grid_size']
                 st.session_state.selected_cell = (cell_x, cell_y)
@@ -274,27 +303,28 @@ def main():
             st.write(f"Selected Cell:")
             st.write(f"  absciss: {cell_x} ordinates: {cell_y})")
 
-            st.write(f"Soil color: {st.session_state.cells_table.soil_color[cell_x, cell_y]}")
-            st.write(f"Population density: {st.session_state.cells_table.population[cell_x, cell_y]}")
-            st.write(f"Maximum population density: {st.session_state.cells_table.max_population[cell_x, cell_y]}")
-            st.write(f"Sea: {st.session_state.cells_table.sea[cell_x, cell_y]}")
-            st.write(f"Culture: {st.session_state.cells_table.culture[cell_x, cell_y]}")
+            # warning : x and y are inverted in st.session_state.grid
+            st.write(f"Soil color: {st.session_state.grid.soil_color[cell_y, cell_x]}")
+            st.write(f"Population density: {st.session_state.grid.population[cell_y, cell_x]}")
+            st.write(f"Maximum population density: {st.session_state.grid.max_population[cell_y, cell_x]}")
+            st.write(f"Sea: {st.session_state.grid.sea[cell_y, cell_x]}")
+            st.write(f"Culture: {st.session_state.grid.culture[cell_y, cell_x]}")
 
             if not st.session_state.running:
                 # TODO customize according to the metric of the selected cell chosen
-                population = st.text_input(language_content["parameters"]["demographics"]["name"], value=st.session_state.cells_table.population[cell_x, cell_y])
-                # culture = st.text_input(language_content["parameters"]["culture"]["name"], value=st.session_state.cells_table.culture[cell_x, cell_y])
-                politics = st.text_input(language_content["parameters"]["politics"]["name"], value=st.session_state.cells_table.politics[cell_x, cell_y])
-                # soil_color = st.text_input(language_content["parameters"]["geographics"]["soil"], value=st.session_state.cells_table.soil_color[cell_x, cell_y])
-                # technology = st.text_input(language_content["parameters"]["technology"]["name"], value=st.session_state.cells_table.technology[cell_x, cell_y])
+                population = st.text_input(language_content["parameters"]["demographics"]["name"], value=st.session_state.grid.population[cell_y, cell_x])
+                # culture = st.text_input(language_content["parameters"]["culture"]["name"], value=st.session_state.grid.culture[cell_y, cell_x])
+                politics = st.text_input(language_content["parameters"]["politics"]["name"], value=st.session_state.grid.politics[cell_y, cell_x])
+                # soil_color = st.text_input(language_content["parameters"]["geographics"]["soil"], value=st.session_state.grid.soil_color[cell_y, cell_x])
+                # technology = st.text_input(language_content["parameters"]["technology"]["name"], value=st.session_state.grid.technology[cell_y, cell_x])
 
                 if st.button("Save"):
                     try:
-                        st.session_state.cells_table.population[cell_x, cell_y] = population
-                        # st.session_state.cells_table.culture[cell_x, cell_y] = culture
-                        st.session_state.cells_table.politics[cell_x, cell_y] = politics
-                        # st.session_state.cells_table.soil_color[cell_x, cell_y] = soil_color
-                        # st.session_state.cells_table.technology[cell_x, cell_y] = technology
+                        st.session_state.grid.population[cell_y, cell_x] = population
+                        # st.session_state.grid.culture[cell_y, cell_x] = culture
+                        st.session_state.grid.politics[cell_y, cell_x] = politics
+                        # st.session_state.grid.soil_color[cell_y, cell_x] = soil_color
+                        # st.session_state.grid.technology[cell_y, cell_x] = technology
                     except ValueError:
                         pass  # Ignore invalid input
 
@@ -302,11 +332,12 @@ def main():
     if st.session_state.running:
         time.sleep(1)
         st.session_state.counter += time_step
-        if 'cells_table' in st.session_state:
-            temp_grid = st.session_state.cells_table
+        if 'grid' in st.session_state:
+            temp_grid = st.session_state.grid
             temp_grid.timestep(st.session_state['parameters'], time_step)
             temp_grid.display = True
-            st.session_state.cells_table = temp_grid
+            st.session_state.grid = temp_grid
+
         st.rerun()
 
     # parameters edition tab

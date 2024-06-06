@@ -11,6 +11,7 @@ labels:
     display_list: Displayed data
     display:
       population: population
+      sea: sea
       max_population: maximum population
       culture: culture
       soil: type of soil
