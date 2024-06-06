@@ -71,7 +71,7 @@ def add_grid(map_img, grid_size, color_array):
             for i in range(len(color_array)):
                 for j in range(len(color_array[0])):
                     # print(color_array[i][j][0])
-                    depth = 255 - int(np.clip(color_array[i][j][0], 0, 1) * 255)
+                    depth = int(np.clip(color_array[i][j][0], 0, 1) * 255)
                     color = (depth, 0, 0, depth)
                     cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
                     # print(color)
@@ -80,17 +80,17 @@ def add_grid(map_img, grid_size, color_array):
             for i in range(len(color_array)):
                 for j in range(len(color_array[0])):
                     # print(color_array[i][j][0])
-                    depth = 255 - int(np.clip(color_array[i][j], 0, 1) * 255)
+                    depth = int(np.clip(color_array[i][j], 0, 1) * 255)
                     color = (depth, 0, 0, depth)
                     cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
                     # print(color)
 
         for y in range(0, h, grid_size):
-            cv2.line(overlay, (0, y), (w, y), (255, 0, 0), 1)
+            cv2.line(overlay, (0, y), (w, y), black, 1)
         for x in range(0, w, grid_size):
-            cv2.line(overlay, (x, 0), (x, h), (255, 0, 0), 1)
+            cv2.line(overlay, (x, 0), (x, h), black, 1)
 
-        alpha = 0.5  # Transparency factor
+        alpha = 0.3  # Transparency factor
         grid_img = cv2.addWeighted(overlay, alpha, grid_img, 1 - alpha, 0)
 
     return grid_img
@@ -155,7 +155,8 @@ def main():
     if 'selected_cell' not in st.session_state:
         st.session_state.selected_cell = (0, 0)
 
-    st.session_state['grid_size'] = st.sidebar.slider("Grid size", 5, 50, 20)
+    # slider for setting Grid size (= map resolution for simulation)
+    st.session_state['grid_size'] = st.sidebar.slider("Grid size", 5, 50, 10)
     map_img = load_map()
 
     # Create table of Cells with random initialization
@@ -163,31 +164,19 @@ def main():
     num_rows = h // st.session_state['grid_size']
     num_cols = w // st.session_state['grid_size']
 
+    # if grid not instantiated yet, we instantiate it
     if 'cells_table' not in st.session_state:
         st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
-        # for dim in st.session_state['parameters']['grid_dimensions']:
-        #     if dim['type'] == 'float':
-        #         st.session_state.cells_table[dim] = np.zeros((num_rows, num_cols), dtype=float)
-        #     if dim['type'] == 'int':
-        #         st.session_state.cells_table[dim] = np.zeros((num_rows, num_cols), dtype=int)
-        #     if dim['type'] == 'vector':
-        #         st.session_state.cells_table[dim] = np.random.rand(num_rows, num_cols, 4)
 
-        # st.session_state.cells_table = [[Cells(np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand()) for _ in range(num_cols)] for _ in range(num_rows)]
-
-    # print(st.session_state['cells_table'])
-
-    # print(st.session_state.cells_table.current_grid_size)
-        
-    print(st.session_state['cells_table'] is None)
-
+    # if grid is instantiated
     if st.session_state['cells_table'] is not None:
 
+        # necessary to force redraw the map if grid resolution change
         if st.session_state['cells_table'].current_grid_size != st.session_state['grid_size']:
             st.session_state.cells_table = Grid(num_rows, num_cols, map_img, st.session_state['grid_size'], st.session_state['parameters'])
 
+        # this block is for (re)drawing the simulation overlay on the map according to the chosen metric
         if st.session_state['display_filter'] == "population":
-            print("display population")
             grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.population)
         if st.session_state['display_filter'] == "max_population":
             grid_img = add_grid(map_img, st.session_state['grid_size'], st.session_state.cells_table.max_population)
@@ -235,8 +224,6 @@ def main():
 
         st.write(f"Counter value: {st.session_state.counter}")
 
-        
-
         # Create two columns with custom widths
         col1, col2 = st.columns([4, 1])  # 4:1 ratio for the column widths
 
@@ -263,20 +250,22 @@ def main():
                 st.session_state.selected_cell = (cell_x, cell_y)
 
             cell_x, cell_y = st.session_state.selected_cell
-            st.write(f"Selected Cell: ({cell_x}, {cell_y})")
-            # selected_cell = st.session_state.cells_table[cell_x][cell_y]
+            st.write(f"Selected Cell:")
+            st.write(f"  absciss: {cell_x} ordinates: {cell_y})")
+
+            st.write(f"Soil color: {st.session_state.cells_table.soil_color[cell_x, cell_y]}")
+            st.write(f"Population density: {st.session_state.cells_table.population[cell_x, cell_y]}")
+            st.write(f"Maximum population density: {st.session_state.cells_table.max_population[cell_x, cell_y]}")
+            st.write(f"Sea: {st.session_state.cells_table.sea[cell_x, cell_y]}")
+            st.write(f"Culture: {st.session_state.cells_table.culture[cell_x, cell_y]}")
 
             if not st.session_state.running:
+                # TODO customize according to the metric of the selected cell chosen
                 population = st.text_input(language_content["parameters"]["demographics"]["name"], value=st.session_state.cells_table.population[cell_x, cell_y])
                 # culture = st.text_input(language_content["parameters"]["culture"]["name"], value=st.session_state.cells_table.culture[cell_x, cell_y])
                 politics = st.text_input(language_content["parameters"]["politics"]["name"], value=st.session_state.cells_table.politics[cell_x, cell_y])
                 # soil_color = st.text_input(language_content["parameters"]["geographics"]["soil"], value=st.session_state.cells_table.soil_color[cell_x, cell_y])
                 # technology = st.text_input(language_content["parameters"]["technology"]["name"], value=st.session_state.cells_table.technology[cell_x, cell_y])
-            #     f1 = st.text_input("f1", value=selected_cell.f1)
-            #     f2 = st.text_input("f2", value=selected_cell.f2)
-            #     f3 = st.text_input("f3", value=selected_cell.f3)
-            #     f4 = st.text_input("f4", value=selected_cell.f4)
-            #     f5 = st.text_input("f5", value=selected_cell.f5)
 
                 if st.button("Save"):
                     try:
@@ -288,23 +277,15 @@ def main():
                     except ValueError:
                         pass  # Ignore invalid input
 
+    # simulation launched : we execute timestep function and redraw the map every second
     if st.session_state.running:
-        # while st.session_state.counter < 2100:
         time.sleep(1)
         st.session_state.counter += time_step
-        # print(st.session_state['grid_size'])
         if 'cells_table' in st.session_state:
-            # print(st.session_state.keys())
-            # print(st.session_state.cells_table.current_grid_size)
-            # print(type(st.session_state.cells_table) is Grid)
             temp_grid = st.session_state.cells_table
-            temp_grid.timestep(st.session_state['parameters'])
+            temp_grid.timestep(st.session_state['parameters'], time_step)
             temp_grid.display = True
             st.session_state.cells_table = temp_grid
-            # print(st.session_state.cells_table.display)
-            # st.session_state.cells_table = st.session_state.cells_table.timestep(st.session_state['parameters'])
-        # st.session_state.cells_table = update_cells(st.session_state.cells_table, st.session_state['parameters'])
-        # print(st.session_state.cells_table.current_grid_size)
         st.rerun()
 
     # parameters edition tab

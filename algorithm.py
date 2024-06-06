@@ -82,8 +82,11 @@ class Grid:
         self.prestige = np.zeros((num_rows, num_cols), dtype=float)
 
         # extract sea cells
-        sea_mask = map_img[:, :, 2] >= parameters['geographics']['sea_blue_cutoff']
-        self.sea = sea_mask.astype(int)
+        sea_mask = self.soil_color[:, :, 2] >= parameters['geographics']['sea_blue_cutoff']
+        self.sea = sea_mask.astype(float)
+        print(f'soil color : {self.soil_color[5,5]}')
+        print(sea_mask[5, 5])
+        print(f'sea : {self.sea[5, 5]}')
 
         # print(self.soil_color[5,5])
         # compute soil components
@@ -99,6 +102,12 @@ class Grid:
         # initialize population randomly
         self.population = np.random.rand(num_rows, num_cols)
 
+        # set population on sea at zero
+        self.population = np.multiply(self.population, self.sea)
+
+        # set culture on sea at zero
+        self.culture = np.multiply(self.culture, np.stack([self.sea] * 4, axis=-1))
+
         # compute population roof at Paleolithic age
         self.max_population = np.zeros((num_rows, num_cols), dtype=float)
         for soil in parameters['geographics']['soil_types']:
@@ -107,6 +116,9 @@ class Grid:
             # print(self.max_population.shape)
             # print(population_per_soil)
             self.max_population += population_per_soil
+
+        # set max population on sea at zero
+        self.max_population = np.multiply(self.max_population, self.sea)
 
         # self.population = np.zeros((num_rows, num_cols), dtype=float)
         #
@@ -127,9 +139,12 @@ class Grid:
         # # set technological stages at Paleolithic
         # self.technology = np.zeros((num_rows, num_cols), dtype=int)
 
-    def timestep(self, parameters):
+    def timestep(self, parameters, time_step):
 
         # update fonction for each time step
+
+        time_space = time_step * self.current_grid_size ** 2
+        cell_size = float(self.current_grid_size ** 2)
 
         # update population roof according to technology
         self.max_population = np.zeros((self.num_rows, self.num_cols), dtype=float)
@@ -143,13 +158,13 @@ class Grid:
                 self.max_population += tech_mask * self.soil[soil] * parameters['geographics']['fertility_per_technology_level'][tech_name][soil + "_fertility"]
 
         # population increase
-        # self.population = self.population * np.exp(parameters['demographics']['natural_growth'])
-        print(self.population[5,5])
+        self.population = self.population * np.exp(parameters['demographics']['natural_growth'] * time_step)
+        print(f'population : {self.population[5,5]}')
         # self.population = self.population * parameters['demographics']['natural_growth']
-        self.population += 0.1
-        print(self.max_population[5,5])
-        self.population_excess = np.maximum(self.population - self.max_population, 0)
-        print(self.population_excess[5,5])
+        # self.population += 0.1
+        print(f'population max : {self.max_population[5,5]}')
+        self.population_excess = np.maximum(self.population - self.max_population, 0) * cell_size
+        print(f'population excess : {self.population_excess[5,5]}')
 
         # migrations
 
@@ -157,12 +172,12 @@ class Grid:
         demo_kernel = np.array([[0, 1, 0],
                         [1, 0, 1],
                         [0, 1, 0]]) / 4.0
-        
+
         # distribute excess population to neighbors
         population_migration = convolve(self.population_excess, demo_kernel, mode='constant', cval=0.0)
-        print(population_migration[5,5])
+        print(f'population migration : {population_migration[5,5]}')
 
-        endogenous_demo_ratio = self.population / (self.population + population_migration + 0.0001) # we add an epsilon to the denominator to avoid division by zero
+        endogenous_demo_ratio = self.population / (self.population + population_migration / cell_size + 0.0001) # we add an epsilon to the denominator to avoid division by zero
 
         # Define the kernel for distributing culture to 4 neighbors
         culture_kernel = np.array([[0, 1, 0],
@@ -182,50 +197,50 @@ class Grid:
         # population clipped after applying migrations
         self.population = np.minimum(self.population + population_migration, self.max_population)
     
-        ### tech progress
-        tech_contagion_kernel = np.array([[0, 1, 0],
-                        [1, 0, 1],
-                        [0, 1, 0]])
+        # ### tech progress
+        # tech_contagion_kernel = np.array([[0, 1, 0],
+        #                 [1, 0, 1],
+        #                 [0, 1, 0]])
         
-        tech_contagion_potential = convolve(self.technology, tech_contagion_kernel, mode='constant', cval=0.0)
+        # tech_contagion_potential = convolve(self.technology, tech_contagion_kernel, mode='constant', cval=0.0)
 
-        # get the map of tech coefficients according to the political stage
-        tech_coefficients = np.array([p['tech_coefficient'] for p in parameters['politics']])
-        tech_coefficients = tech_coefficients[self.politics]
+        # # get the map of tech coefficients according to the political stage
+        # tech_coefficients = np.array([p['tech_coefficient'] for p in parameters['politics']])
+        # tech_coefficients = tech_coefficients[self.politics]
 
-        tech_progress_potential = parameters['technology']['tech_progress_population_coefficient'] * self.population
-        + parameters['technology']['tech_progress_political_coefficient'] * tech_coefficients
-        + parameters['technology']['tech_progress_contagion_coefficient'] * tech_contagion_potential
+        # tech_progress_potential = parameters['technology']['tech_progress_population_coefficient'] * self.population
+        # + parameters['technology']['tech_progress_political_coefficient'] * tech_coefficients
+        # + parameters['technology']['tech_progress_contagion_coefficient'] * tech_contagion_potential
 
-        # let us check if arctan(tech_progress_potential + random) > pi/4
-        tech_progress_potential = np.arctan(tech_progress_potential + np.random.rand(*tech_progress_potential.shape))
-        tech_progress_potential = tech_progress_potential > np.pi/4
-        tech_progress_potential = tech_progress_potential.astype(int)
+        # # let us check if arctan(tech_progress_potential + random) > pi/4
+        # tech_progress_potential = np.arctan(tech_progress_potential + np.random.rand(*tech_progress_potential.shape))
+        # tech_progress_potential = tech_progress_potential > np.pi/4
+        # tech_progress_potential = tech_progress_potential.astype(int)
 
-        # add progress where it happened
-        self.technology += tech_progress_potential
-        # clip maximal progress
-        self.technology = np.minimum(self.technology, len(parameters['politics']) - 1)
+        # # add progress where it happened
+        # self.technology += tech_progress_potential
+        # # clip maximal progress
+        # self.technology = np.minimum(self.technology, len(parameters['politics']) - 1)
 
-        ### political progress
-        politics_contagion_kernel = np.array([[0, 1, 0],
-                        [1, 0, 1],
-                        [0, 1, 0]])
+        # ### political progress
+        # politics_contagion_kernel = np.array([[0, 1, 0],
+        #                 [1, 0, 1],
+        #                 [0, 1, 0]])
         
-        politics_contagion_potential = convolve(self.politics, politics_contagion_kernel, mode='constant', cval=0.0)
+        # politics_contagion_potential = convolve(self.politics, politics_contagion_kernel, mode='constant', cval=0.0)
 
-        politics_progress_potential = parameters['politics_progress']['politics_progress_population_coefficient'] * self.population
-        + parameters['politics_progress']['politics_progress_contagion_coefficient'] * politics_contagion_potential
+        # politics_progress_potential = parameters['politics_progress']['politics_progress_population_coefficient'] * self.population
+        # + parameters['politics_progress']['politics_progress_contagion_coefficient'] * politics_contagion_potential
 
-        # let us check if arctan(tech_progress_potential + random) > pi/4
-        politics_progress_potential = np.arctan(politics_progress_potential + np.random.rand(*politics_progress_potential.shape))
-        politics_progress_potential = politics_progress_potential > np.pi/4
-        politics_progress_potential = politics_progress_potential.astype(int)
+        # # let us check if arctan(tech_progress_potential + random) > pi/4
+        # politics_progress_potential = np.arctan(politics_progress_potential + np.random.rand(*politics_progress_potential.shape))
+        # politics_progress_potential = politics_progress_potential > np.pi/4
+        # politics_progress_potential = politics_progress_potential.astype(int)
 
-        # add political change where it happened
-        self.politics += politics_progress_potential
-        # clip maximal progress
-        self.politics = np.minimum(self.politics, len(parameters['politics']) - 1)
+        # # add political change where it happened
+        # self.politics += politics_progress_potential
+        # # clip maximal progress
+        # self.politics = np.minimum(self.politics, len(parameters['politics']) - 1)
 
 # class Cells:
 #     def __init__(self, population, soil, culture, technology, politics, prestige):

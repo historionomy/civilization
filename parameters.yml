@@ -14,12 +14,12 @@ grid_dimensions:
 
 demographics:
   # yearly natural growth coefficient
-  natural_growth: 1.001
-  # natural_growth: 0.0001
+  # natural_growth: 1.001
+  natural_growth: 0.0001
 
 geographics:
   # threshold of blue level (in RGB format) for sea characterization
-  sea_blue_cutoff: 100
+  sea_blue_cutoff: 0.4
   # list of soil types
   soil_types:
   - forest
