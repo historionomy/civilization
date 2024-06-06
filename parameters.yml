@@ -1,9 +1,15 @@
+time:
+  start_year : -4000
+  end_year: 2500
+  time_step : 10
+
 demographics:
   # yearly natural growth coefficient
   natural_growth: 0.1
 
 geographics:
   map_path: "europe.png"
+  ha_per_px : 960
   zones:
   - Terrain: Sea
     Fertility: 0.0001
@@ -54,28 +60,40 @@ geographics:
 fertility_per_technology_level:
 - index : 1
   age: paleolithic
+  year: -50000
   max_population_per_ha: 0.001
 - index : 2
   age:  neolithic
+  year: -10000
   max_population_per_ha: 0.01
 - index : 3
   age:  copper_age
+  year: -4000
   max_population_per_ha: 0.1
 - index : 4
   age:  bronze_age
+  year: -2500
   max_population_per_ha: 0.2
 - index : 5
   age:  iron_age_1
+  year: -1000
   max_population_per_ha: 0.3
 - index : 6
   age:  iron_age_2
+  year: 500
   max_population_per_ha: 0.5
 - index : 7
   age:  pre_industrial
+  year: 1200
   max_population_per_ha: 1
 - index : 8
   age: industrial
+  year: 1800
   max_population_per_ha: 2
+- index : 9
+  age: industrial
+  year: 2500
+  max_population_per_ha: 2.5
 
 scenarios:
   # population initialization for Neolithic scenario
