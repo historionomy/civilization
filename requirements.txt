@@ -8,6 +8,6 @@ plotly
 pillow
 pyjwt
 pyyaml
-opencv-python
+opencv-python-headless
 streamlit-image-coordinates
 scipy
