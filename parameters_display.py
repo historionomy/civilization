@@ -47,7 +47,6 @@ def create_parameters_tab(language_content, parameters):
                 tech_keys = list(parameters["technology"].keys())
                 tech_keys.remove("technological_stages")
                 for coef in tech_keys:
-                    # print(temp_parameters["technology"][coef])
                     temp_parameters["technology"][coef] = st.text_input(language_content["parameters"]["technology"][coef], parameters["technology"][coef])
 
             # politics parameters
@@ -62,7 +61,6 @@ def create_parameters_tab(language_content, parameters):
                     pol_stages_list_coefs = list(pol_stage.keys())
                     pol_stages_list_coefs.remove("name")
                     for coef in pol_stages_list_coefs:
-                        # print(pol_stage[coef])
                         temp_parameters["politics"][i][coef] = st.text_input(language_content["parameters"]["politics"][coef], parameters["politics"][i][coef], key=coef + "_" + pol_stage["name"] + "_edit")
 
         if st.button("Save", key="save_cell_parameters"):

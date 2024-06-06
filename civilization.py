@@ -38,8 +38,6 @@ def add_grid(map_img, grid_size, color_array):
     h, w, _ = map_img.shape
     overlay = grid_img.copy()
 
-    print(color_array.shape)
-
     # Draw the color overlay based on cell values
     map_type = 'scalar'
     if (len(color_array.shape) > 2):
@@ -55,7 +53,6 @@ def add_grid(map_img, grid_size, color_array):
                     int(np.clip(blue, 0, 1) * 255),
                     int(np.clip(alpha, 0, 1) * 255),
                 )
-                # print(color)
                 cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
 
         for y in range(0, h, grid_size):
@@ -70,20 +67,16 @@ def add_grid(map_img, grid_size, color_array):
         if (len(color_array.shape) > 2):
             for i in range(len(color_array)):
                 for j in range(len(color_array[0])):
-                    # print(color_array[i][j][0])
                     depth = int(np.clip(color_array[i][j][0], 0, 1) * 255)
                     color = (depth, 0, 0, depth)
                     cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
-                    # print(color)
 
         else:
             for i in range(len(color_array)):
                 for j in range(len(color_array[0])):
-                    # print(color_array[i][j][0])
                     depth = int(np.clip(color_array[i][j], 0, 1) * 255)
                     color = (depth, 0, 0, depth)
                     cv2.rectangle(overlay, (j * grid_size, i * grid_size), ((j + 1) * grid_size, (i + 1) * grid_size), color, -1)
-                    # print(color)
 
         for y in range(0, h, grid_size):
             cv2.line(overlay, (0, y), (w, y), black, 1)
