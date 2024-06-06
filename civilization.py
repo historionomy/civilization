@@ -27,7 +27,7 @@ st.set_page_config(layout="wide")
 
 # Load the map of Europe
 def load_map():
-    map_path = "europe_middle_east.jpg"  # Path to your map image
+    map_path = "europe.png"  # Path to your map image
     map_img = cv2.imread(map_path)
     map_img = cv2.cvtColor(map_img, cv2.COLOR_BGR2RGB)  # Convert from BGR to RGB
     return map_img
@@ -119,6 +119,21 @@ if 'grid_size' not in st.session_state:
 if 'grid_img' not in st.session_state:
     st.session_state['grid_img'] = []
 
+default_grid_size = 10
+default_counter = -4000
+
+def reset_simulation():
+    if st.session_state.reset_simulation_request == True:
+        st.session_state.counter = default_counter
+        # Create table of Cells with random initialization
+        h, w, _ = st.session_state.map_img.shape
+        num_rows = h // st.session_state.grid_size
+        num_cols = w // st.session_state.grid_size
+        st.session_state.cells_table = [[Cells(np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand(), np.random.rand()) for _ in range(num_cols)] for _ in range(num_rows)]
+
+        st.session_state.reset_simulation_request = False
+
+
 # Main function
 def main():
 
@@ -142,15 +157,27 @@ def main():
 
     # Initialize session state variables
     if 'counter' not in st.session_state:
-        st.session_state.counter = -4000
+        st.session_state.counter = default_counter
     if 'running' not in st.session_state:
         st.session_state.running = False
     if 'selected_cell' not in st.session_state:
         st.session_state.selected_cell = (0, 0)
+    if 'reset_simulation_request' not in st.session_state:
+        st.session_state.reset_simulation_request = True        
+    if 'grid_size' not in st.session_state:
+        st.session_state.grid_size = default_grid_size
+    if 'map_img' not in st.session_state:
+        st.session_state.map_img = load_map()
 
     # slider for setting Grid size (= map resolution for simulation)
-    st.session_state['grid_size'] = st.sidebar.slider("Grid size", 5, 50, 10)
+    grid_size = st.sidebar.slider("Grid size", 5, 50, default_grid_size)
+    if st.session_state.grid_size != grid_size:
+        st.session_state.grid_size = grid_size
+        st.session_state.reset_simulation_request = True
     map_img = load_map()
+
+    reset_simulation()
+    grid_img = add_grid(st.session_state.map_img, st.session_state.grid_size, st.session_state.cells_table)
 
     # Create table of Cells with random initialization
     h, w, _ = map_img.shape
@@ -214,6 +241,7 @@ def main():
         if col3.button("Reset"):
             st.session_state.counter = -4000
             st.session_state.running = False
+            st.session_state.reset_simulation_request = True
 
         st.write(f"Counter value: {st.session_state.counter}")
 
