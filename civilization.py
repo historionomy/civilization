@@ -181,6 +181,7 @@ def main():
         st.session_state.reset_simulation_request = True        
     if 'grid_size' not in st.session_state:
         st.session_state.grid_size = default_grid_size
+    # CODE AUGUSTIN
     if 'map_img' not in st.session_state:
         st.session_state.map_img = load_map()
 
