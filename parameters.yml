@@ -13,7 +13,7 @@ geographics:
   zones:
   - Terrain: Sea
     Fertility: 0.0001
-    Population diffusivity: 100
+    Population diffusivity: 10
     RGB: (13, 44, 91)
     Hex: "#0D2C5B" 
   - Terrain: Ice
@@ -23,7 +23,7 @@ geographics:
     Hex: "#D3E4E3" 
   - Terrain: Lake
     Fertility: 0.0001
-    Population diffusivity: 100
+    Population diffusivity: 20
     RGB: (51, 112, 204)
     Hex: "#3370CC" 
   - Terrain: Plain

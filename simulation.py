@@ -100,11 +100,11 @@ class Simulation_data:
 
         match field_name:
             case "population":
-                max_X = np.max(self.Pmax)
+                max_X = self.ha_per_px*2.5 #np.max(self.Pmax)
             case _ :
                 max_X = np.max(X)
 
-        grayscale_array = np.array(255*X/max_X).astype('uint8')
+        grayscale_array = np.array(255*np.sqrt(X/max_X)).astype('uint8')
         overlay = np.zeros(self.map_img.shape)
         overlay[:,:,0]= self.map_img[:,:,0]* (1-grayscale_array/255.0) + grayscale_array/255.0* grayscale_array
         overlay[:,:,1]= self.map_img[:,:,1]* (1-grayscale_array/255.0) #+ grayscale_array/255.0* grayscale_array
@@ -139,10 +139,10 @@ class Simulation_data:
     
     def iterate(self):
         self.set_max_population()
-        diffusion = scipy.ndimage.laplace(self.population)*self.population_diffusivity_map/100
-        diffusion[diffusion>10*self.natural_growth] = 10*self.natural_growth
-        diffusion[diffusion<-10*self.natural_growth] = -10*self.natural_growth
+        #diffusion = scipy.ndimage.laplace(scipy.ndimage.gaussian_filter(self.population*self.population_diffusivity_map,1,radius=self.time_step*10))/1000
+        diffusion = scipy.ndimage.gaussian_laplace(self.population*self.population_diffusivity_map,sigma=self.time_step*2)
         dP = self.natural_growth*self.population*(1-self.population/self.Pmax) + diffusion
         self.population += dP*self.time_step
         self.population[self.population < 0] = 1e-4
         self.year += self.time_step
+        print(np.min(diffusion))
