@@ -1,3 +1,5 @@
+import cupy as cp
+from cupyx.scipy import ndimage
 import os
 import yaml
 import pandas as pd
@@ -45,25 +47,34 @@ class Simulation_data:
         self.fertility_per_technology_level = None
 
     def set_max_population(self):
-        self.Pmax = self.ha_per_px*self.fertility_per_year[self.fertility_per_year['year']==self.year].iloc[0]["max_population_per_ha"]*self.fertility_map
+        self.Pmax = self.ha_per_px*self.fertility_per_year[self.fertility_per_year['year']==self.year].iloc[0]["max_population_per_ha"]*self.fertility_map*self.natural_growth*float(parameters['demographics']['population_trim'])
 
     def reset_simulation(self):
         # Load image
         map_path = parameters['geographics']['map_path']  # Path to your map image
         self.map_img = cv2.imread(map_path)
         self.map_img = cv2.cvtColor(self.map_img, cv2.COLOR_BGR2RGB)
+        self.map_img_cp = cp.asarray(self.map_img)
         self.map_height, self.map_width, _ = self.map_img.shape
 
-        # Compute geographical dependant coefficient for fertility and population diffusivity
+        # Load constants
+        self.natural_growth = parameters['demographics']['natural_growth']
+        self.ha_per_px = parameters['geographics']['ha_per_px']
+        self.start_year = parameters['time']['start_year']
+        self.end_year = parameters['time']['end_year']
+        self.time_step = parameters['time']['time_step']
+
+        # Compute geographical dependant coefficient for fertility and population_diffusivity
         geographics_params = [ {**geo_param, "RGB" : ast.literal_eval(geo_param['RGB']) } for geo_param in  parameters['geographics']['zones']]
         geographics_params = [ {**geo_param, "color" : geo_param['RGB'][0]+256*geo_param['RGB'][1]+(256^2)*geo_param['RGB'][2] } for geo_param in  geographics_params]
 
         color_values = [x['color'] for x in geographics_params]
         fertility_values = [x['Fertility'] for x in geographics_params]
-        diffusivity_values = [x['Population diffusivity'] for x in geographics_params]
+        diffusivity_values = [x['population_diffusivity'] for x in geographics_params]
 
         fertility_polynomial_coefs = scipy.interpolate.lagrange(color_values, fertility_values).coef
         population_diffusivity_polynomial_coefs = scipy.interpolate.lagrange(color_values, diffusivity_values).coef
+
 
         X = self.map_img[:,:,0].astype(np.int32)+256*self.map_img[:,:,1].astype(np.int32)+(256^2)*self.map_img[:,:,2].astype(np.int32)
         fertility_map = np.zeros(X.shape)
@@ -73,15 +84,11 @@ class Simulation_data:
             fertility_map = np.multiply(fertility_map,X) + fertility_polynomial_coefs[i]
             population_diffusivity_map = np.multiply(population_diffusivity_map,X)  + population_diffusivity_polynomial_coefs[i]
 
-        self.fertility_map = fertility_map
-        self.population_diffusivity_map = population_diffusivity_map
+        self.fertility_map = cp.asarray(fertility_map)
+        self.population_diffusivity_map = cp.asarray(population_diffusivity_map)
 
-        # Load constants
-        self.natural_growth = parameters['demographics']['natural_growth']
-        self.ha_per_px = parameters['geographics']['ha_per_px']
-        self.start_year = parameters['time']['start_year']
-        self.end_year = parameters['time']['end_year']
-        self.time_step = parameters['time']['time_step']
+        #self.fertility_map = ndimage.gaussian_filter(self.fertility_map,order=0,sigma=self.time_step)
+        self.population_diffusivity_map = ndimage.gaussian_filter(self.population_diffusivity_map,order=0,sigma=2)
 
         # Functions
         self.fertility_per_technology_level = pd.DataFrame(parameters['fertility_per_technology_level'])
@@ -90,7 +97,7 @@ class Simulation_data:
 
         #initialisation
         self.year = self.start_year
-        self.population = np.zeros(self.map_img[:,:,0].shape)
+        self.population = cp.asarray(np.zeros(self.map_img[:,:,0].shape))
         ## TODO parametrize population start
         self.population[800,800] = 1
         self.set_max_population()
@@ -98,19 +105,26 @@ class Simulation_data:
     def view_field(self,field_name):
         X = getattr(self, field_name)
 
+        xp = cp.get_array_module(X)
+
         match field_name:
             case "population":
-                max_X = self.ha_per_px*2.5 #np.max(self.Pmax)
+                max_X = xp.max(X) #self.ha_per_px*2.5 #np.max(self.Pmax)
             case _ :
-                max_X = np.max(X)
+                max_X = xp.max(X)
+        Y = X.copy()
 
-        grayscale_array = np.array(255*np.sqrt(X/max_X)).astype('uint8')
-        overlay = np.zeros(self.map_img.shape)
-        overlay[:,:,0]= self.map_img[:,:,0]* (1-grayscale_array/255.0) + grayscale_array/255.0* grayscale_array
-        overlay[:,:,1]= self.map_img[:,:,1]* (1-grayscale_array/255.0) #+ grayscale_array/255.0* grayscale_array
-        overlay[:,:,2]= self.map_img[:,:,2]* (1-grayscale_array/255.0) #+ grayscale_array/255.0* grayscale_array
+        Y[(Y>1)] = 255
+        Y[(Y<1)*(Y>1e-5)] = 127
+        
+        grayscale_array = xp.array(Y).astype('uint8') #grayscale_array = xp.array(255*xp.sqrt(X/max_X)).astype('uint8')
 
-        img = overlay.astype('uint8')
+        overlay = xp.zeros(self.map_img.shape)
+        overlay[:,:,0]= self.map_img_cp[:,:,0]* (1-grayscale_array/255.0) + grayscale_array/255.0* grayscale_array
+        overlay[:,:,1]= self.map_img_cp[:,:,1]* (1-grayscale_array/255.0) #+ grayscale_array/255.0* grayscale_array
+        overlay[:,:,2]= self.map_img_cp[:,:,2]* (1-grayscale_array/255.0) #+ grayscale_array/255.0* grayscale_array
+
+        img = cp.asnumpy(overlay).astype('uint8')
         font                   = cv2.FONT_HERSHEY_SIMPLEX
         bottomLeftCornerOfText = (10,40)
         fontScale              = 1.5
@@ -120,7 +134,7 @@ class Simulation_data:
 
         time = self.year-self.start_year
 
-        img = cv2.putText(img,"Year="+f"{time:04}"+ ", Max "+field_name+"="+"{:.0f}".format(np.max(X)), 
+        img = cv2.putText(img,"Year="+f"{time:04}"+ ", Max "+field_name+"="+"{:.1e}".format(np.sum(X)), 
             bottomLeftCornerOfText, 
             font, 
             fontScale,
@@ -139,10 +153,25 @@ class Simulation_data:
     
     def iterate(self):
         self.set_max_population()
-        #diffusion = scipy.ndimage.laplace(scipy.ndimage.gaussian_filter(self.population*self.population_diffusivity_map,1,radius=self.time_step*10))/1000
-        diffusion = scipy.ndimage.gaussian_laplace(self.population*self.population_diffusivity_map,sigma=self.time_step*2)
-        dP = self.natural_growth*self.population*(1-self.population/self.Pmax) + diffusion
+        dx = ndimage.gaussian_filter(self.population,order=[0,1],sigma=self.time_step)
+        dy = ndimage.gaussian_filter(self.population,order=[1,0],sigma=self.time_step)
+        dkdx = ndimage.gaussian_filter(self.population_diffusivity_map*dx,order=[0,1],sigma=self.time_step) #self.population_diffusivity_map*
+        dkdy = ndimage.gaussian_filter(self.population_diffusivity_map*dy,order=[1,0],sigma=self.time_step) #self.population_diffusivity_map*
+        self.diffusion = (dkdx + dkdy)*float(parameters['geographics']['population_diffusivity_trim'])
+        dP = self.natural_growth*self.population*(1-self.population/self.Pmax) + self.diffusion      
         self.population += dP*self.time_step
-        self.population[self.population < 0] = 1e-4
+        self.population[self.population < 1e-5] = 0
         self.year += self.time_step
-        print(np.min(diffusion))
+
+if __name__ == "__main__":
+
+    obj = Simulation_data()
+    obj.reset_simulation()
+    obj.plot_field("population")
+
+    start_time = time.time()
+    #print(benchmark(Simulation_data.iterate, (obj,), n_repeat=100))
+    for i in range(1,6500):
+        obj.iterate()
+        obj.view_field("population")
+    print("--- %s seconds --- : diffusion" % (time.time() - start_time))    
