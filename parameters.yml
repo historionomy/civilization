@@ -5,7 +5,7 @@ time:
 
 demographics:
   # yearly natural growth coefficient
-  natural_growth: 0.1
+  natural_growth: 0.01
   population_trim: 0.33
 
 geographics:

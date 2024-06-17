@@ -11,3 +11,6 @@ pyyaml
 opencv-python
 streamlit-image-coordinates
 time
+tqdm
+cupy
+ffmpeg-python
