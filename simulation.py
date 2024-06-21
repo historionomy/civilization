@@ -18,6 +18,7 @@ from matplotlib import pyplot as plt
 import tqdm
 import subprocess
 #import ffmpeg
+import concurrent.futures
 
 # load parameters
 parameter_file = "parameters.yml"
@@ -45,11 +46,11 @@ def rgb_to_hsv(rgb):
 
 def hsv_to_rgb(hsv):
     xp = cp.get_array_module(hsv)
-    h = hsv[:,:,0]/180
+    h6 = hsv[:,:,0]*(6/180)
     s = hsv[:,:,1]/255
     v = hsv[:,:,2]
-    i  = xp.trunc(h*6.0)
-    f = (h*6.0) - i
+    i  = xp.trunc(h6)
+    f = (h6) - i
     p = v*(1.0 - s)
     q = v*(1.0 - s*f)
     t = v*(1.0 - s*(1.0-f))
@@ -59,11 +60,49 @@ def hsv_to_rgb(hsv):
     rgb = xp.moveaxis(rgbT,0,2)
     return xp.rint(rgb).astype('uint8')
 
+def h1sv_to_rgb(h1,sv):
+    xp = cp.get_array_module(sv)
+    h6 = h1*(6/180)
+    s = sv[:,:,0]/255
+    v = sv[:,:,1]
+    i  = np.trunc(h6)
+    f = (h6) - i
+    p = v*(1.0 - s)
+    q = v*(1.0 - s*f)
+    t = v*(1.0 - s*(1.0-f))
+    i = i%6
+    match i:
+        case 0:
+            rgbT = xp.array([v, t, p])
+        case 1:
+            rgbT = xp.array([q, v, p])
+        case 2:
+            rgbT = xp.array([p, v, t])
+        case 3:
+            rgbT = xp.array([p, q, v])
+        case 4:
+            rgbT = xp.array([t, p, v])
+        case 5:
+            rgbT = xp.array([v, p, q])
+    rgb = xp.moveaxis(rgbT,0,2)
+    return xp.rint(rgb).astype('uint8')
+
 def build_checkerboard(w, h) :
     N= 8
     re = np.r_[ w*(N*[0]+N*[1]) ]              # even-numbered rows
     ro = np.r_[ w*(N*[1]+N*[0]) ]              # odd-numbered rows
     return np.row_stack(h*(N*(re,)+N*(ro,)))[:w,:h]
+
+def store_images(image_table,image_name):
+    font                   = cv2.FONT_HERSHEY_SIMPLEX
+    bottomLeftCornerOfText = (10,40)
+    fontScale              = 1.5
+    fontColor              = (255,255,255)
+    thickness              = 5
+    lineType               = 1
+        
+    images = cv2.vconcat([cv2.hconcat([cv2.putText(image['img'],image['text'],bottomLeftCornerOfText,font,fontScale,fontColor,thickness,lineType) for image in row]) for row in image_table])
+    cv2.imwrite(image_name,cv2.cvtColor(images, cv2.COLOR_RGB2BGR))
 
 class Simulation_data:
     def __init__(self):
@@ -92,6 +131,7 @@ class Simulation_data:
         self.Pmax = self.ha_per_px*self.fertility_per_year[self.fertility_per_year['year']==self.year].iloc[0]["max_population_per_ha"]*self.fertility_map
 
     def reset_simulation(self):
+      
         # Load image
         map_path = parameters['geographics']['map_path']  # Path to your map image
         self.map_img = cv2.imread(map_path)
@@ -150,6 +190,8 @@ class Simulation_data:
         # display
         self.image_list = []
         self.checkerboard = cp.asarray(build_checkerboard(self.map_img.shape[0],self.map_img.shape[1]))[:self.map_img.shape[0],:self.map_img.shape[1]]
+        self.Pool = concurrent.futures.ThreadPoolExecutor()
+        self.display_tasks = []
 
     def view_field(self,field_name):
         X = getattr(self, field_name)
@@ -160,7 +202,7 @@ class Simulation_data:
 
         match field_name:
             case "population":
-                h = xp.zeros(Y.shape) # red
+                h_red = 0 # red
                 # v = xp.power(xp.min(Ya,1),0.25) * self.fertility_map * 255
                 # s = (1-xp.power(Ya/self.ha_per_px*2.5,0.25)) * 255
                 v = xp.zeros(Y.shape)
@@ -168,57 +210,51 @@ class Simulation_data:
                 v[(Y<1)*(Y>1e-5)] = 127 * (xp.power(Ya,0.25) * self.fertility_map)[(Y<1)*(Y>1e-5)] #Population is displayed in dark red when bellow 1
                 population_max_bound = self.ha_per_px*self.fertility_per_year['max_population_per_ha'].max()
                 s = (xp.ones(Y.shape) - xp.power(Ya/(population_max_bound),1)*self.checkerboard)  * 255 #Population is displayed as checkflag when it reach the max population in history
+                sv = xp.moveaxis(xp.array([s, v]),0,2)
+                rgb = h1sv_to_rgb(h_red,sv)
+
+                displayed_value = xp.sum(X)
             case "diffusion" :
-                h = xp.zeros(Y.shape) # red
-                h[Y<0] = (180/360) * 255 # blue
+                h_red = 0
+                h_blue = (180/360) * 255
                 v = xp.power(Ya/xp.max(Ya),0.25) * 255
                 s = xp.ones(Y.shape) * 255
+
+                v_red = v.copy()
+                v_red[Y<0] = (v*0)[Y<0]
+                v_blue = v.copy()
+                v_blue[Y>0] = (v*0)[Y>0]
+                rgb = h1sv_to_rgb(h_red,xp.moveaxis(xp.array([s, v_red]),0,2)) + h1sv_to_rgb(h_blue,xp.moveaxis(xp.array([s, v_blue]),0,2))
+                displayed_value = xp.sum(xp.abs(X))
             case _ :
-                h = xp.zeros(Y.shape) # red
-                h[Y<0] = 170 # blue
+                h = 0 # red
+                #h[Y<0] = 170 # blue
                 v = xp.power(Ya/xp.max(Ya),0.25) * 255
                 s = xp.ones(Y.shape) *255
-        
-        hsv = xp.moveaxis(xp.array([h, s, v]),0,2)
-        rgb = hsv_to_rgb(hsv)
+                sv = xp.moveaxis(xp.array([s, v]),0,2)
+                rgb = h1sv_to_rgb(h,sv)
+
         overlay = xp.zeros(self.map_img.shape)
         overlay[:,:,0]= self.map_img_cp[:,:,0]* (1-v/255.0) + v/255.0 * rgb[:,:,0]
         overlay[:,:,1]= self.map_img_cp[:,:,1]* (1-v/255.0) + v/255.0 * rgb[:,:,1]
         overlay[:,:,2]= self.map_img_cp[:,:,2]* (1-v/255.0) + v/255.0 * rgb[:,:,2]
 
-        img = cp.asnumpy(overlay).astype('uint8')
-        font                   = cv2.FONT_HERSHEY_SIMPLEX
-        bottomLeftCornerOfText = (10,40)
-        fontScale              = 1.5
-        fontColor              = (255,255,255)
-        thickness              = 5
-        lineType               = 1
-
+        img = cp.asnumpy(overlay.astype('uint8'))
         time = self.year-self.start_year
 
-        img = cv2.putText(img,"Year="+f"{time:04}"+ ", Max "+field_name+"="+"{:.1e}".format(np.sum(X)), 
-            bottomLeftCornerOfText, 
-            font, 
-            fontScale,
-            fontColor,
-            thickness,
-            lineType)
+        text = "Year="+f"{time:04}"+ ", Max "+field_name+"="+"{:.1e}".format(displayed_value)
+        return text,img
 
-        #cv2.imwrite("img/"+field_name+"_"+f"{time:04}"+".png",cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-
-        return img
-    
     def view_fields(self):
-        img_pop = self.view_field("population")
-        img_dif = self.view_field("diffusion")
-        images = cv2.hconcat([img_pop, img_dif])
+        text_pop,img_pop = self.view_field("population")
+        text_dif,img_dif = self.view_field("diffusion")
         time = self.year-self.start_year
         image_name = "img/sim_"+f"{time:04}"+".png"
-        cv2.imwrite(image_name,cv2.cvtColor(images, cv2.COLOR_RGB2BGR))
         self.image_list += [image_name]
+        self.display_tasks.append(self.Pool.submit(store_images,[[{'img' : img_pop, 'text' : text_pop},{'img' : img_dif,'text' : text_dif}]], image_name))
     
     def plot_field(self,field_name):
-        plt.imshow(self.view_field(field_name))
+        plt.imshow(self.view_field(field_name)[1])
         plt.show()
    
     def iterate(self):
@@ -247,6 +283,8 @@ if __name__ == "__main__":
             obj.iterate()
             obj.view_fields()
             pbar.update(1)  
+
+    concurrent.futures.wait(obj.display_tasks)
 
     #video generation
     basepath = os.path.dirname(__file__)
