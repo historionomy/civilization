@@ -326,11 +326,10 @@ class Simulation_data:
         dCdy = ndimage.gaussian_filter(self.culture,order=[1,0,0],sigma=[sigma_culture,sigma_culture,0])
         dCdx2 = ndimage.gaussian_filter((self.population_diffusivity_map*self.population)[:, :, np.newaxis] *dCdx,order=[0,1,0],sigma=[sigma_culture,sigma_culture,0]) 
         dCdy2 = ndimage.gaussian_filter((self.population_diffusivity_map*self.population)[:, :, np.newaxis]*dCdy,order=[1,0,0],sigma=[sigma_culture,sigma_culture,0]) 
-        population_filtered = ndimage.gaussian_filter(self.population,order=[0,0],sigma=[sigma_culture,sigma_culture])[:, :, np.newaxis]
-        self.culture_diffusion = (dCdx2 + dCdy2)*float(parameters['geographics']['population_diffusivity_trim']) / (population_filtered+1)
+        self.culture_diffusion = (dCdx2 + dCdy2)*float(parameters['geographics']['population_diffusivity_trim']) / (self.population[:, :, np.newaxis]+1)
         
         culture_limit = 1  # Culture max maximale
-        parameters['culture']['divergence_coefficient'] = 0.2
+        parameters['culture']['divergence_coefficient'] = 0.15
         divergence = 1/(self.population_diffusivity_map) * parameters['culture']['divergence_coefficient']
         culture_L2 = cp.sqrt(cp.sum(cp.square(self.culture),axis=2))
         culture_filtered = ndimage.gaussian_filter(self.culture,order=[0,0,0],sigma=[sigma_culture,sigma_culture,0])
