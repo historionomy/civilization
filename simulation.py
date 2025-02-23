@@ -4,12 +4,7 @@ import os
 import yaml
 import pandas as pd
 import numpy as np
-import io
 import cv2
-import time
-import cv2
-import functools 
-import colormap
 import ast
 import numpy as np
 import scipy.interpolate
@@ -17,7 +12,6 @@ import yaml
 from matplotlib import pyplot as plt
 import tqdm
 import subprocess
-#import ffmpeg
 import concurrent.futures
 
 # load parameters
@@ -45,20 +39,55 @@ def rgb_to_hsv(rgb):
     return xp.rint(hsv).astype('uint8')
 
 def hsv_to_rgb(hsv):
-    xp = cp.get_array_module(hsv)
-    h6 = hsv[:,:,0]*(6/180)
-    s = hsv[:,:,1]/255
-    v = hsv[:,:,2]
-    i  = xp.trunc(h6)
-    f = (h6) - i
-    p = v*(1.0 - s)
-    q = v*(1.0 - s*f)
-    t = v*(1.0 - s*(1.0-f))
-    i = i%6
-    ones = xp.ones(i.shape)
-    rgbT = xp.equal(i,0*ones) * xp.array([v, t, p]) + xp.equal(i,1*ones) * xp.array([q, v, p]) +xp.equal(i,2*ones) * xp.array([p, v, t]) +xp.equal(i,3*ones) * xp.array([p, q, v]) +xp.equal(i,4*ones) * xp.array([t, p, v]) +xp.equal(i,5*ones) * xp.array([v, p, q])
-    rgb = xp.moveaxis(rgbT,0,2)
-    return xp.rint(rgb).astype('uint8')
+    """
+    Convert an HSV image to RGB.
+
+    Parameters:
+    -----------
+    hsv : cupy.ndarray
+        Input HSV image with shape (height, width, 3) and values in [0,1].
+        - hsv[:,:,0] : Hue (H), normalized between 0 and 1
+        - hsv[:,:,1] : Saturation (S), between 0 and 1
+        - hsv[:,:,2] : Value (V), between 0 and 1
+
+    Returns:
+    --------
+    rgb : cupy.ndarray
+        Output RGB image with shape (height, width, 3) and values in [0,1].
+        - rgb[:,:,0] : Red (R)
+        - rgb[:,:,1] : Green (G)
+        - rgb[:,:,2] : Blue (B)
+    """
+    # Extract H, S, V channels
+    H = hsv[:,:,0]
+    S = hsv[:,:,1]
+    V = hsv[:,:,2]
+
+    # Compute H_prime (normalized hue for the chromatic wheel)
+    H_prime = H * 6
+    # Compute region index (0 to 5)
+    i = cp.floor(H_prime).astype(cp.int32) % 6
+    # Fractional part of H_prime
+    f = H_prime - cp.floor(H_prime)
+
+    # Intermediate values
+    p = V * (1 - S)
+    q = V * (1 - S * f)
+    t = V * (1 - S * (1 - f))
+
+    # Stack choices for R, G, B into single CuPy arrays
+    choices_R = cp.stack([V, q, p, p, t, V], axis=0)  # Shape: (6, height, width)
+    choices_G = cp.stack([t, V, V, q, p, p], axis=0)  # Shape: (6, height, width)
+    choices_B = cp.stack([p, p, t, V, V, q], axis=0)  # Shape: (6, height, width)
+
+    # Select values for R, G, B based on region index i
+    R = cp.choose(i, choices_R)
+    G = cp.choose(i, choices_G)
+    B = cp.choose(i, choices_B)
+
+    # Stack R, G, B channels into RGB image
+    rgb = cp.stack([R, G, B], axis=2)
+    return rgb
 
 def h1sv_to_rgb(h1,sv):
     xp = cp.get_array_module(sv)
@@ -181,6 +210,7 @@ class Simulation_data:
         #initialisation
         self.year = self.start_year
         self.population = cp.asarray(np.zeros(self.map_img[:,:,0].shape))
+        self.culture = 0.02 * cp.random.randn(*(self.map_img[:,:,0].shape +(2,)))#La culture est dimension 2
         ## TODO parametrize population start
         
         self.set_max_population()
@@ -209,7 +239,8 @@ class Simulation_data:
                 v[Y>1] = ((128 + 127 * xp.power(Ya/xp.max(self.Pmax),0.25)) * self.fertility_map)[Y>1] #Population is displayed in saturated red when it reaches Pmax
                 v[(Y<1)*(Y>1e-5)] = 127 * (xp.power(Ya,0.25) * self.fertility_map)[(Y<1)*(Y>1e-5)] #Population is displayed in dark red when bellow 1
                 population_max_bound = self.ha_per_px*self.fertility_per_year['max_population_per_ha'].max()
-                s = (xp.ones(Y.shape) - xp.power(Ya/(population_max_bound),1)*self.checkerboard)  * 255 #Population is displayed as checkflag when it reach the max population in history
+                #s = (xp.ones(Y.shape) - xp.power(Ya/(population_max_bound),1)*self.checkerboard)  * 255 #Population is displayed as checkflag when it reach the max population in history
+                s = xp.zeros(Y.shape) * 255
                 sv = xp.moveaxis(xp.array([s, v]),0,2)
                 rgb = h1sv_to_rgb(h_red,sv)
 
@@ -226,6 +257,24 @@ class Simulation_data:
                 v_blue[Y>0] = (v*0)[Y>0]
                 rgb = h1sv_to_rgb(h_red,xp.moveaxis(xp.array([s, v_red]),0,2)) + h1sv_to_rgb(h_blue,xp.moveaxis(xp.array([s, v_blue]),0,2))
                 displayed_value = xp.sum(xp.abs(X))
+
+            case "culture" :
+                Y = self.population.copy()
+                v = xp.zeros(Y.shape)
+                v[Y>1] = ((128 + 127 * xp.power(Y/xp.max(self.Pmax),0.25)) * self.fertility_map)[Y>1] #Population is displayed in saturated red when it reaches Pmax
+                v[(Y<1)*(Y>1e-5)] = 127 * (xp.power(Y,0.25) * self.fertility_map)[(Y<1)*(Y>1e-5)] #Population is displayed in dark red when bellow 1
+                population_max_bound = self.ha_per_px*self.fertility_per_year['max_population_per_ha'].max()
+                a, b = self.culture[:,:,0], self.culture[:,:,1]
+                # Calculer la saturation comme la distance euclidienne au centre 
+                hue = (cp.arctan2(b, a) / (2 * cp.pi)) % 1  # Normalisation entre 0 et 1
+                saturation = cp.sqrt(a**2 + b**2) # Norme L2 normalisée
+                #saturation /= cp.max(saturation)  # Normalisation entre
+                value = v.copy()/255.0
+                hsv = cp.stack([hue, saturation, value], axis=2)
+                rgb = hsv_to_rgb(hsv)*255  
+                culture_L2 = cp.sqrt(cp.sum(cp.square(self.culture),axis=2))
+                displayed_value = xp.max(culture_L2)/255           
+            
             case _ :
                 h = 0 # red
                 #h[Y<0] = 170 # blue
@@ -247,7 +296,8 @@ class Simulation_data:
 
     def view_fields(self):
         text_pop,img_pop = self.view_field("population")
-        text_dif,img_dif = self.view_field("diffusion")
+        #text_dif,img_dif = self.view_field("diffusion")
+        text_dif,img_dif = self.view_field("culture")
         time = self.year-self.start_year
         image_name = "img/sim_"+f"{time:04}"+".png"
         self.image_list += [image_name]
@@ -258,17 +308,36 @@ class Simulation_data:
         plt.show()
    
     def iterate(self):
+        xp = cp.get_array_module(self.population)
         self.set_max_population()
-        dx = ndimage.gaussian_filter(self.population,order=[0,1],sigma=self.time_step)
-        dy = ndimage.gaussian_filter(self.population,order=[1,0],sigma=self.time_step)
-        dkdx = ndimage.gaussian_filter(self.population_diffusivity_map*dx,order=[0,1],sigma=self.time_step) #self.population_diffusivity_map*
-        dkdy = ndimage.gaussian_filter(self.population_diffusivity_map*dy,order=[1,0],sigma=self.time_step) #self.population_diffusivity_map*
-        self.diffusion = (dkdx + dkdy)*float(parameters['geographics']['population_diffusivity_trim'])
-        dP = (self.population > 0)* self.natural_growth*self.population*(1-self.population/self.Pmax) + self.diffusion      
+        dPdx = ndimage.gaussian_filter(self.population,order=[0,1],sigma=self.time_step)
+        dPdy = ndimage.gaussian_filter(self.population,order=[1,0],sigma=self.time_step)
+        dPdx2 = ndimage.gaussian_filter(self.population_diffusivity_map*dPdx,order=[0,1],sigma=self.time_step) #self.population_diffusivity_map*
+        dPdy2 = ndimage.gaussian_filter(self.population_diffusivity_map*dPdy,order=[1,0],sigma=self.time_step) #self.population_diffusivity_map*
+        self.population_diffusion = (dPdx2 + dPdy2)*float(parameters['geographics']['population_diffusivity_trim'])
+        dP = (self.population > 0)* self.natural_growth*self.population*(1-self.population/self.Pmax) + self.population_diffusion      
         self.population += dP*self.time_step
         self.population[self.population < -self.Pmax] = -self.Pmax[self.population < -self.Pmax]
         #self.population[self.population < 1e-5] = 0
         self.year += self.time_step
+
+        sigma_culture = 5 * self.time_step
+        dCdx = ndimage.gaussian_filter(self.culture,order=[0,1,0],sigma=[sigma_culture,sigma_culture,0])
+        dCdy = ndimage.gaussian_filter(self.culture,order=[1,0,0],sigma=[sigma_culture,sigma_culture,0])
+        dCdx2 = ndimage.gaussian_filter((self.population_diffusivity_map*self.population)[:, :, np.newaxis] *dCdx,order=[0,1,0],sigma=[sigma_culture,sigma_culture,0]) 
+        dCdy2 = ndimage.gaussian_filter((self.population_diffusivity_map*self.population)[:, :, np.newaxis]*dCdy,order=[1,0,0],sigma=[sigma_culture,sigma_culture,0]) 
+        population_filtered = ndimage.gaussian_filter(self.population,order=[0,0],sigma=[sigma_culture,sigma_culture])[:, :, np.newaxis]
+        self.culture_diffusion = (dCdx2 + dCdy2)*float(parameters['geographics']['population_diffusivity_trim']) / (population_filtered+1)
+        
+        culture_limit = 1  # Culture max maximale
+        parameters['culture']['divergence_coefficient'] = 0.2
+        divergence = 1/(self.population_diffusivity_map) * parameters['culture']['divergence_coefficient']
+        culture_L2 = cp.sqrt(cp.sum(cp.square(self.culture),axis=2))
+        culture_filtered = ndimage.gaussian_filter(self.culture,order=[0,0,0],sigma=[sigma_culture,sigma_culture,0])
+        dC = (self.population[:, :, np.newaxis] > 0)* self.culture_diffusion  + divergence[:, :, np.newaxis]/(divergence+culture_L2)[:, :, np.newaxis] * culture_filtered *(1-culture_L2[:, :, np.newaxis]/culture_limit)
+        dC = cp.nan_to_num(dC, nan=0)
+        self.culture += (dC)*self.time_step
+        self.culture *= (culture_limit / xp.maximum(culture_L2,1)[:,:,np.newaxis] if xp.max(culture_L2) > culture_limit else 1)
 
 if __name__ == "__main__":
     #initialisation
