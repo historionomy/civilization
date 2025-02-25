@@ -177,7 +177,7 @@ class Simulation_data:
 
         # Compute geographical dependant coefficient for fertility and population_diffusivity
         geographics_params = [ {**geo_param, "RGB" : ast.literal_eval(geo_param['RGB']) } for geo_param in  parameters['geographics']['zones']]
-        geographics_params = [ {**geo_param, "color" : geo_param['RGB'][0]+256*geo_param['RGB'][1]+(256^2)*geo_param['RGB'][2] } for geo_param in  geographics_params]
+        geographics_params = [ {**geo_param, "color" : geo_param['RGB'][0]+256*geo_param['RGB'][1]+(256**2)*geo_param['RGB'][2] } for geo_param in  geographics_params]
 
         color_values = [x['color'] for x in geographics_params]
         fertility_values = [x['Fertility'] for x in geographics_params]
@@ -187,7 +187,7 @@ class Simulation_data:
         population_diffusivity_polynomial_coefs = scipy.interpolate.lagrange(color_values, diffusivity_values).coef
 
 
-        X = self.map_img[:,:,0].astype(np.int32)+256*self.map_img[:,:,1].astype(np.int32)+(256^2)*self.map_img[:,:,2].astype(np.int32)
+        X = self.map_img[:,:,0].astype(np.int32)+256*self.map_img[:,:,1].astype(np.int32)+(256**2)*self.map_img[:,:,2].astype(np.int32)
         fertility_map = np.zeros(X.shape)
         population_diffusivity_map = np.zeros(X.shape)
 
