@@ -3,10 +3,35 @@ time:
   end_year: 2500
   time_step : 10
 
+initalisation:
+  - name: "Rome"
+    population: 10
+    i: 1060
+    j: 575
+  - name: "Babylon"
+    population: 10
+    i: 1275
+    j: 1485
+  - name: "Paris"
+    population: 10
+    i: 825
+    j: 400
+  - name: "London"
+    population: 10
+    i: 730
+    j: 400
+  - name: "Berlin"
+    population: 10
+    i: 725
+    j: 645
+
 demographics:
   # yearly natural growth coefficient
   natural_growth: 0.01
   population_trim: 0.33
+
+culture:
+  divergence_coefficient : 0.0015
 
 geographics:
   map_path: "europe.png"
@@ -97,42 +122,3 @@ fertility_per_technology_level:
   year: 2500
   max_population_per_ha: 2.5
 
-scenarios:
-  # population initialization for Neolithic scenario
-  neolithic:
-    # forest population initialization
-    forest_population_initialization: 0.1
-    # mediterranean population initialization
-    mediterranean_population_initialization: 0.1
-    # coordinates of neolithic start
-    neolithic_start:
-      x: 10
-      y: 20
-
-culture:
-  # the cultural prestige is the product of :
-  # - the tech level
-  # - the political stage
-  cultural_prestige_tech_coefficient: 1
-  political_stage_coefficient: 1
-
-technology:
-  # each year, probability to reach next level is the product of :
-  # - population
-  # - political stage
-  # - cultural surface beyond a given threshold
-  tech_progress_population_coefficient: 1
-  tech_progress_political_coefficient: 1
-  tech_progress_cultural_coefficient: 1
-
-politics:
-# list of the political stages
-# each stage has
-# - name
-# - coef for cultural power
-# - coef for tech progress
-# - coef for tech adoption from neighbors
-- name: barbarians
-  culture_coefficient: 1
-  tech_coefficient: 1
-  tech_contagion_coefficient: 1

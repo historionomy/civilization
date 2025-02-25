@@ -214,7 +214,8 @@ class Simulation_data:
         ## TODO parametrize population start
         
         self.set_max_population()
-        self.population[800,800] =self.Pmax[800,800]
+        for location in parameters['initalisation']:
+            self.population[location["i"],location["j"]] = location["population"] 
         self.population = ndimage.gaussian_filter(self.population,order=0,sigma=self.time_step)
 
         # display
@@ -266,13 +267,13 @@ class Simulation_data:
                 population_max_bound = self.ha_per_px*self.fertility_per_year['max_population_per_ha'].max()
                 a, b = self.culture[:,:,0], self.culture[:,:,1]
                 # Calculer la saturation comme la distance euclidienne au centre 
-                hue = (cp.arctan2(b, a) / (2 * cp.pi)) % 1  # Normalisation entre 0 et 1
-                saturation = cp.sqrt(a**2 + b**2) # Norme L2 normalisée
-                #saturation /= cp.max(saturation)  # Normalisation entre
+                hue = (xp.arctan2(b, a) / (2 * xp.pi)) % 1  # Normalisation entre 0 et 1
+                saturation = xp.sqrt(a**2 + b**2) # Norme L2 normalisée
+                #saturation /= xp.max(saturation)  # Normalisation entre
                 value = v.copy()/255.0
-                hsv = cp.stack([hue, saturation, value], axis=2)
+                hsv = xp.stack([hue, saturation, value], axis=2)
                 rgb = hsv_to_rgb(hsv)*255  
-                culture_L2 = cp.sqrt(cp.sum(cp.square(self.culture),axis=2))
+                culture_L2 = xp.sqrt(xp.sum(xp.square(self.culture),axis=2))
                 displayed_value = xp.max(culture_L2)/255           
             
             case _ :
@@ -295,13 +296,14 @@ class Simulation_data:
         return text,img
 
     def view_fields(self):
-        text_pop,img_pop = self.view_field("population")
+        #text_pop,img_pop = self.view_field("population")
         #text_dif,img_dif = self.view_field("diffusion")
         text_dif,img_dif = self.view_field("culture")
         time = self.year-self.start_year
         image_name = "img/sim_"+f"{time:04}"+".png"
         self.image_list += [image_name]
-        self.display_tasks.append(self.Pool.submit(store_images,[[{'img' : img_pop, 'text' : text_pop},{'img' : img_dif,'text' : text_dif}]], image_name))
+        #self.display_tasks.append(self.Pool.submit(store_images,[[{'img' : img_pop, 'text' : text_pop},{'img' : img_dif,'text' : text_dif}]], image_name))
+        self.display_tasks.append(self.Pool.submit(store_images,[[{'img' : img_dif,'text' : text_dif}]], image_name))
     
     def plot_field(self,field_name):
         plt.imshow(self.view_field(field_name)[1])
@@ -309,36 +311,93 @@ class Simulation_data:
    
     def iterate(self):
         xp = cp.get_array_module(self.population)
-        self.set_max_population()
-        dPdx = ndimage.gaussian_filter(self.population,order=[0,1],sigma=self.time_step)
-        dPdy = ndimage.gaussian_filter(self.population,order=[1,0],sigma=self.time_step)
-        dPdx2 = ndimage.gaussian_filter(self.population_diffusivity_map*dPdx,order=[0,1],sigma=self.time_step) #self.population_diffusivity_map*
-        dPdy2 = ndimage.gaussian_filter(self.population_diffusivity_map*dPdy,order=[1,0],sigma=self.time_step) #self.population_diffusivity_map*
-        self.population_diffusion = (dPdx2 + dPdy2)*float(parameters['geographics']['population_diffusivity_trim'])
-        dP = (self.population > 0)* self.natural_growth*self.population*(1-self.population/self.Pmax) + self.population_diffusion      
-        self.population += dP*self.time_step
-        self.population[self.population < -self.Pmax] = -self.Pmax[self.population < -self.Pmax]
-        #self.population[self.population < 1e-5] = 0
-        self.year += self.time_step
-
-        sigma_culture = 5 * self.time_step
-        dCdx = ndimage.gaussian_filter(self.culture,order=[0,1,0],sigma=[sigma_culture,sigma_culture,0])
-        dCdy = ndimage.gaussian_filter(self.culture,order=[1,0,0],sigma=[sigma_culture,sigma_culture,0])
-        dCdx2 = ndimage.gaussian_filter((self.population_diffusivity_map*self.population)[:, :, np.newaxis] *dCdx,order=[0,1,0],sigma=[sigma_culture,sigma_culture,0]) 
-        dCdy2 = ndimage.gaussian_filter((self.population_diffusivity_map*self.population)[:, :, np.newaxis]*dCdy,order=[1,0,0],sigma=[sigma_culture,sigma_culture,0]) 
-        self.culture_diffusion = (dCdx2 + dCdy2)*float(parameters['geographics']['population_diffusivity_trim']) / (self.population[:, :, np.newaxis]+1)
+        # Précharger les paramètres constants sur GPU pour éviter les conversions implicites
+        diffusivity_trim = xp.asarray(float(parameters['geographics']['population_diffusivity_trim']))
+        natural_growth = xp.asarray(self.natural_growth)
+        time_step = xp.asarray(self.time_step)
+        culture_limit = xp.asarray(1.0)  # Constante sur GPU
+        divergence_coeff = xp.asarray(parameters['culture']['divergence_coefficient'])
         
-        culture_limit = 1  # Culture max maximale
-        parameters['culture']['divergence_coefficient'] = 0.15
-        divergence = 1/(self.population_diffusivity_map) * parameters['culture']['divergence_coefficient']
-        culture_L2 = cp.sqrt(cp.sum(cp.square(self.culture),axis=2))
-        culture_filtered = ndimage.gaussian_filter(self.culture,order=[0,0,0],sigma=[sigma_culture,sigma_culture,0])
-        dC = (self.population[:, :, np.newaxis] > 0)* self.culture_diffusion  + divergence[:, :, np.newaxis]/(divergence+culture_L2)[:, :, np.newaxis] * culture_filtered *(1-culture_L2[:, :, np.newaxis]/culture_limit)
-        dC = cp.nan_to_num(dC, nan=0)
-        self.culture += (dC)*self.time_step
-        self.culture *= (culture_limit / xp.maximum(culture_L2,1)[:,:,np.newaxis] if xp.max(culture_L2) > culture_limit else 1)
+        # S'assurer que tous les attributs sont déjà des tableaux CuPy
+        population = self.population
+        Pmax = self.Pmax
+        diffusivity_map = self.population_diffusivity_map
+        culture = self.culture
 
+        # 1. Calculs de diffusion de population
+        # Fusionner les filtres gaussiens en une seule passe si possible (gain limité ici à cause des ordres)
+        dPdx = ndimage.gaussian_filter(population, order=[0, 1], sigma=time_step)
+        dPdy = ndimage.gaussian_filter(population, order=[1, 0], sigma=time_step)
+        
+        # Pré-calculer le produit une seule fois et réutiliser
+        diffusivity_times_dPdx = diffusivity_map * dPdx
+        diffusivity_times_dPdy = diffusivity_map * dPdy
+        
+        dPdx2 = ndimage.gaussian_filter(diffusivity_times_dPdx, order=[0, 1], sigma=time_step)
+        dPdy2 = ndimage.gaussian_filter(diffusivity_times_dPdy, order=[1, 0], sigma=time_step)
+        
+        # Calcul vectorisé de la diffusion
+        population_diffusion = (dPdx2 + dPdy2) * diffusivity_trim
+        
+        # Calcul de dP avec vectorisation complète
+        growth_term = xp.where(population > 0, natural_growth * population * (1 - population / Pmax), 0)
+        dP = growth_term + population_diffusion
+        
+        # Mise à jour de la population avec bornes
+        population += dP * time_step
+        population = xp.clip(population, -Pmax, None)  # Remplace population < -Pmax
+        
+        # Option : seuillage à 1e-5 (décommenter si nécessaire)
+        # population = xp.where(population < 1e-5, 0, population)
+        
+        self.year += time_step
+
+        # 2. Calculs de diffusion de culture
+        sigma_culture = 5 * time_step
+        sigma_culture_3d = [sigma_culture, sigma_culture, 0]  # Réutilisation
+        
+        dCdx = ndimage.gaussian_filter(culture, order=[0, 1, 0], sigma=sigma_culture_3d)
+        dCdy = ndimage.gaussian_filter(culture, order=[1, 0, 0], sigma=sigma_culture_3d)
+        
+        # Pré-calculer le facteur commun et ajouter la dimension sans copie excessive
+        pop_diffusivity_weight = (diffusivity_map * population)[:, :, xp.newaxis]
+        dCdx_weighted = pop_diffusivity_weight * dCdx
+        dCdy_weighted = pop_diffusivity_weight * dCdy
+        
+        dCdx2 = ndimage.gaussian_filter(dCdx_weighted, order=[0, 1, 0], sigma=sigma_culture_3d)
+        dCdy2 = ndimage.gaussian_filter(dCdy_weighted, order=[1, 0, 0], sigma=sigma_culture_3d)
+        
+        # Calcul de la diffusion culturelle
+        culture_diffusion = (dCdx2 + dCdy2) * diffusivity_trim / (xp.mean(population) + 1)
+        
+        # Calcul de la divergence et normalisation
+        divergence = divergence_coeff / diffusivity_map
+        culture_L2 = xp.sqrt(xp.sum(xp.square(culture), axis=2))
+        culture_filtered = ndimage.gaussian_filter(culture, order=[0, 0, 0], sigma=sigma_culture_3d)
+        
+        # Vectorisation complète de dC
+        divergence_term = divergence[:, :, xp.newaxis] / (divergence + culture_L2)[:, :, xp.newaxis]
+        growth_culture = divergence_term * culture_filtered * (1 - culture_L2[:, :, xp.newaxis] / culture_limit)
+        dC = xp.where(population[:, :, xp.newaxis] > 0, culture_diffusion, 0) + growth_culture
+        dC = xp.nan_to_num(dC, nan=0)  # Gestion des NaN
+        
+        # Mise à jour de la culture avec normalisation
+        culture += dC * time_step
+        culture_L2_updated = xp.sqrt(xp.sum(xp.square(culture), axis=2))
+        scale_factor = xp.where(culture_L2_updated > culture_limit, 
+                            culture_limit / culture_L2_updated, 
+                            1.0)[:, :, cp.newaxis]
+        culture *= scale_factor
+
+        # Mettre à jour les attributs
+        self.population = population
+        self.culture = culture
+        self.population_diffusion = population_diffusion
+        self.culture_diffusion = culture_diffusion
 if __name__ == "__main__":
+
+    video = False
+
     #initialisation
     obj = Simulation_data()
     obj.reset_simulation()
@@ -351,6 +410,9 @@ if __name__ == "__main__":
             obj.iterate()
             obj.view_fields()
             pbar.update(1)  
+
+    if not video:
+        obj.view_fields()
 
     concurrent.futures.wait(obj.display_tasks)
 
@@ -367,7 +429,7 @@ if __name__ == "__main__":
 
     os.chdir(basepath)
     video_name = os.path.join(image_path,"civilisation.mp4")
-    command = ['ffmpeg','-f','concat','-r','25','-y','-i',image_list_filename,video_name]
+    command = ['ffmpeg','-hwaccel', 'cuda','-f','concat','-r','25','-y','-i',image_list_filename,video_name]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = process.communicate()
     print(stderr.decode())

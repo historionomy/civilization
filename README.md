@@ -52,12 +52,9 @@ Desert | 0.0001| 0.2
 | -------- | ------- | -------| ---- |---- |
 | Géographie  | La carte contient différents sous-espaces géographiques : plaines, montagnes, thalassographie. La carte est discrétisée sous forme de cases.   | | | $f :$ ``` fertility_per_technology_level ``` <br> $\kappa :$ ``` population_diffusivity ```
 | Démographie  | Chaque case a une capacité démographique maximale, qui dépend du niveau technologique.     | $P :$ ``` population ```  <br> $T :$``` technological_level ```| $${dP \over dt} = r P(1-{P \over P_{max}}) +\textrm{div} (\kappa\nabla{P})$$ <br> $$P_{max} = f(T)$$ | $r :$ ``` natural_growth ```  |
-| Culture    | Chaque unité de population a une “culture” qui évolue dans un espace de dimension 2. Elle est initialisée avec un bruit blanc aléatoire. La diffusion culturelle est est corrélée aux flux de population. On ajoute un terme de divergence pour forcer les cultures à se différencier. | $C :$  ``` culture ``` <br> $d_0 :$  ``` coefficient de divergence culturelle ```  | $${dC \over dt}={\textrm{div} (\kappa P \nabla{C})\over P} + {qC \over {q + \lVert C \rVert}} * ( 1- {\lVert C \rVert \over C_{max}} ) $$ | $q :$  ``` coefficient de divergence culturelle ```|
-| Progrès    | À chaque unité de temps, la probabilité qu’une case passe au niveau technologique ou politique suivant est calculée en fonction de la densité de population, de l’avancement politique et de la surface culturelle contiguë.   | ``` technology ```| $$\mathbb{P}(T+1 \mid T)=g(\int_x {S \cdot P \cdot \mathbb{1}_{\{c_k>0.5\}}})$$|``` tech_progress_population_coefficient ```  <br> ``` tech_progress_political_coefficient ```  <br>  ``` tech_progress_cultural_coefficient ```|
-| Homogénéisation    | La culture se diffuse par proximité et forme nécessairement un zone culturelle connnexe. Des cultures minoritaires peuvent être présentes, une case est rattachée à la zone de sa culture majoritaire. Lorsqu'une culture minoritaire est recouverte intégralement par une seule culture majoritaire, elle est absorbée.  | | If $\forall x, c_k(x,t) > c_l(x,t)$, merge culture $l$ in culture $k$. |
-| Migration    | La croissance démographique naturelle peut déborder sur les cases avoisinantes, selon un mécanisme de diffusion. Les populations sont attirées par les zones avec le meilleur prestige culturel   | |$$-\textrm{div} (\kappa\nabla{P})$$ |
+| Culture    | Chaque unité de population a une “culture” qui évolue dans un espace de dimension 2. Elle est initialisée avec un bruit blanc aléatoire. La diffusion culturelle est est corrélée aux flux de population. On ajoute un terme de divergence pour forcer les cultures à se différencier. | $C :$  ``` culture ```  | $${dC \over dt}={\textrm{div} (\kappa P \nabla{C})\over P_{mean}} + {qC \over {q + \lVert C \rVert}} * ( 1- {\lVert C \rVert \over C_{max}} ) $$ | $q :$  ``` divergence_coefficient ```|
 
-$f :$ ``` fertility_per_technology_level ```
+
 ```mermaid
 ---
 config:
