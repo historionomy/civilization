@@ -116,6 +116,45 @@ def h1sv_to_rgb(h1,sv):
     rgb = xp.moveaxis(rgbT,0,2)
     return xp.rint(rgb).astype('uint8')
 
+def oklab_to_rgb(oklab):
+    """
+    Convertit une image Oklab (L: 0-1, a/b: -0.4 à 0.4 environ) en RGB (0-255).
+    """
+    xp = cp.get_array_module(oklab)
+
+    # Matrice inverse LMS -> Oklab
+    M2_inv = xp.array([
+        [1.0,  0.3963377774,  0.2158037573],
+        [1.0, -0.1055613458, -0.0638541728],
+        [1.0, -0.0894841775, -1.2914855480]
+    ])
+    lms = xp.einsum('ij,...j->...i', M2_inv, oklab)
+
+    # Inverser la non-linéarité (cube)
+    lms = xp.power(lms, 3)
+
+    # Matrice inverse RGB -> LMS
+    M1_inv = xp.array([
+        [ 4.0767416621, -3.3077115913,  0.2309699292],
+        [-1.2684380046,  2.6097574011, -0.3413193965],
+        [-0.0041960863, -0.7034186147,  1.7076147010]
+    ])
+    rgb = xp.einsum('ij,...j->...i', M1_inv, lms)
+
+    # Clamper à [0, 1] et convertir en 0-255
+    rgb = xp.clip(rgb, 0, 1) * 255
+    return xp.rint(rgb).astype('uint8')
+
+def ab_to_rgb(a, b, L=0.5):
+    """
+    Convertit des composantes a, b (chromaticité) avec une luminosité L fixe en RGB.
+    - a, b : tableaux CuPy de même forme que ta carte.
+    - L : luminosité fixe (par défaut 0.5 pour une visibilité moyenne).
+    """
+    xp = cp.get_array_module(a)
+    oklab = xp.stack([xp.full_like(a, L), a, b], axis=-1)
+    return oklab_to_rgb(oklab)
+
 def build_checkerboard(w, h) :
     N= 8
     re = np.r_[ w*(N*[0]+N*[1]) ]              # even-numbered rows
@@ -156,8 +195,11 @@ class Simulation_data:
         # Functions
         self.fertility_per_technology_level = pd.DataFrame()
 
-    def set_max_population(self):
+    def set_max_population_of_year(self):
         self.Pmax = self.ha_per_px*self.fertility_per_year[self.fertility_per_year['year']==self.year].iloc[0]["max_population_per_ha"]*self.fertility_map
+    
+    def get_max_population_absolute(self):
+        return self.ha_per_px*self.fertility_per_year.iloc[-500]["max_population_per_ha"]*self.fertility_map
 
     def reset_simulation(self):
       
@@ -209,11 +251,12 @@ class Simulation_data:
 
         #initialisation
         self.year = self.start_year
+        self.Pmax_absolute = self.get_max_population_absolute()
         self.population = cp.asarray(np.zeros(self.map_img[:,:,0].shape))
         self.culture = 0.02 * cp.random.randn(*(self.map_img[:,:,0].shape +(2,)))#La culture est dimension 2
         ## TODO parametrize population start
         
-        self.set_max_population()
+        self.set_max_population_of_year()
         for location in parameters['initalisation']:
             self.population[location["i"],location["j"]] = location["population"] 
         self.population = ndimage.gaussian_filter(self.population,order=0,sigma=self.time_step)
@@ -224,76 +267,61 @@ class Simulation_data:
         self.Pool = concurrent.futures.ThreadPoolExecutor()
         self.display_tasks = []
 
-    def view_field(self,field_name):
+    def view_field(self, field_name):
         X = getattr(self, field_name)
-
         xp = cp.get_array_module(X)
         Y = X.copy()
         Ya = xp.abs(Y)
 
         match field_name:
             case "population":
-                h_red = 0 # red
-                # v = xp.power(xp.min(Ya,1),0.25) * self.fertility_map * 255
-                # s = (1-xp.power(Ya/self.ha_per_px*2.5,0.25)) * 255
-                v = xp.zeros(Y.shape)
-                v[Y>1] = ((128 + 127 * xp.power(Ya/xp.max(self.Pmax),0.25)) * self.fertility_map)[Y>1] #Population is displayed in saturated red when it reaches Pmax
-                v[(Y<1)*(Y>1e-5)] = 127 * (xp.power(Ya,0.25) * self.fertility_map)[(Y<1)*(Y>1e-5)] #Population is displayed in dark red when bellow 1
-                population_max_bound = self.ha_per_px*self.fertility_per_year['max_population_per_ha'].max()
-                #s = (xp.ones(Y.shape) - xp.power(Ya/(population_max_bound),1)*self.checkerboard)  * 255 #Population is displayed as checkflag when it reach the max population in history
-                s = xp.zeros(Y.shape) * 255
-                sv = xp.moveaxis(xp.array([s, v]),0,2)
-                rgb = h1sv_to_rgb(h_red,sv)
-
+                # Luminosité (L) proportionnelle à la population, a/b pour contraste
+                L = xp.power(Ya / xp.max(self.Pmax), 0.25) * self.fertility_map  # 0 à 1
+                a = xp.zeros_like(Y)  # Pas de vert-rouge
+                b = L * 0.2  # Jaune léger pour population positive
+                rgb = ab_to_rgb(a, b, L)
                 displayed_value = xp.sum(X)
-            case "diffusion" :
-                h_red = 0
-                h_blue = (180/360) * 255
-                v = xp.power(Ya/xp.max(Ya),0.25) * 255
-                s = xp.ones(Y.shape) * 255
 
-                v_red = v.copy()
-                v_red[Y<0] = (v*0)[Y<0]
-                v_blue = v.copy()
-                v_blue[Y>0] = (v*0)[Y>0]
-                rgb = h1sv_to_rgb(h_red,xp.moveaxis(xp.array([s, v_red]),0,2)) + h1sv_to_rgb(h_blue,xp.moveaxis(xp.array([s, v_blue]),0,2))
+            case "diffusion":
+                # Luminosité pour l'intensité, a/b pour direction
+                L = xp.power(Ya / xp.max(Ya), 0.25)
+                a = xp.where(Y > 0, L * 0.2, -L * 0.2)  # Rouge pour positif, vert pour négatif
+                b = xp.zeros_like(Y)
+                rgb = ab_to_rgb(a, b, L)
                 displayed_value = xp.sum(xp.abs(X))
 
-            case "culture" :
+            case "culture":
+                # a, b directement à partir des dimensions culturelles
+                alpha = 0.02  
                 Y = self.population.copy()
-                v = xp.zeros(Y.shape)
-                v[Y>1] = ((128 + 127 * xp.power(Y/xp.max(self.Pmax),0.25)) * self.fertility_map)[Y>1] #Population is displayed in saturated red when it reaches Pmax
-                v[(Y<1)*(Y>1e-5)] = 127 * (xp.power(Y,0.25) * self.fertility_map)[(Y<1)*(Y>1e-5)] #Population is displayed in dark red when bellow 1
-                population_max_bound = self.ha_per_px*self.fertility_per_year['max_population_per_ha'].max()
-                a, b = self.culture[:,:,0], self.culture[:,:,1]
-                # Calculer la saturation comme la distance euclidienne au centre 
-                hue = (xp.arctan2(b, a) / (2 * xp.pi)) % 1  # Normalisation entre 0 et 1
-                saturation = xp.sqrt(a**2 + b**2) # Norme L2 normalisée
-                #saturation /= xp.max(saturation)  # Normalisation entre
-                value = v.copy()/255.0
-                hsv = xp.stack([hue, saturation, value], axis=2)
-                rgb = hsv_to_rgb(hsv)*255  
-                culture_L2 = xp.sqrt(xp.sum(xp.square(self.culture),axis=2))
-                displayed_value = xp.max(culture_L2)/255           
-            
-            case _ :
-                h = 0 # red
-                #h[Y<0] = 170 # blue
-                v = xp.power(Ya/xp.max(Ya),0.25) * 255
-                s = xp.ones(Y.shape) *255
-                sv = xp.moveaxis(xp.array([s, v]),0,2)
-                rgb = h1sv_to_rgb(h,sv)
+                L = xp.zeros_like(Y)
+                L[Y > 1e-5] = (xp.power(Y/((1-alpha)*self.Pmax+alpha*self.Pmax_absolute), 0.25)* self.fertility_map)[Y > 1e-5]
+                # L[Y > 1] = xp.power(Y / xp.max(self.Pmax), 0.25)[Y > 1] * self.fertility_map[Y > 1]
+                # L[(Y < 1) * (Y > 1e-5)] = (xp.power(Y, 0.25) * self.fertility_map)[(Y < 1) * (Y > 1e-5)]
+                a = self.culture[:, :, 0] * 0.4  # Échelle pour rester dans [-0.4, 0.4]
+                b = self.culture[:, :, 1] * 0.4  # Échelle pour rester dans [-0.4, 0.4]
+                rgb = ab_to_rgb(a, b, L)
+                culture_L2 = xp.sqrt(xp.sum(xp.square(self.culture), axis=2))
+                displayed_value = xp.max(culture_L2)
 
+            case _:
+                # Par défaut : luminosité seulement
+                L = xp.power(Ya / xp.max(Ya), 0.25)
+                a = xp.zeros_like(Y)
+                b = xp.zeros_like(Y)
+                rgb = ab_to_rgb(a, b, L)
+                displayed_value = xp.max(Ya)
+
+        # Superposition avec la carte
         overlay = xp.zeros(self.map_img.shape)
-        overlay[:,:,0]= self.map_img_cp[:,:,0]* (1-v/255.0) + v/255.0 * rgb[:,:,0]
-        overlay[:,:,1]= self.map_img_cp[:,:,1]* (1-v/255.0) + v/255.0 * rgb[:,:,1]
-        overlay[:,:,2]= self.map_img_cp[:,:,2]* (1-v/255.0) + v/255.0 * rgb[:,:,2]
+        overlay[:, :, 0] = self.map_img_cp[:, :, 0] * (1 - L) + L * rgb[:, :, 0]
+        overlay[:, :, 1] = self.map_img_cp[:, :, 1] * (1 - L) + L * rgb[:, :, 1]
+        overlay[:, :, 2] = self.map_img_cp[:, :, 2] * (1 - L) + L * rgb[:, :, 2]
 
         img = cp.asnumpy(overlay.astype('uint8'))
-        time = self.year-self.start_year
-
-        text = "Year="+f"{time:04}"+ ", Max "+field_name+"="+"{:.1e}".format(displayed_value)
-        return text,img
+        time = self.year - self.start_year
+        text = f"Year={time:04d}, Max {field_name}={displayed_value:.1e}"
+        return text, img
 
     def view_fields(self):
         #text_pop,img_pop = self.view_field("population")
